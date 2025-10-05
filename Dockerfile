@@ -8,6 +8,9 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --no-audit --prefer-offline
 
+# Generate Prisma client
+RUN npx prisma generate
+
 # Copy source and build
 COPY . .
 RUN npm run build
