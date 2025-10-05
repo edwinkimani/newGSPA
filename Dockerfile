@@ -8,11 +8,13 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm ci --no-audit --prefer-offline
 
-# Generate Prisma client
+# ✅ Copy full source code including prisma/schema.prisma
+COPY . .
+
+# ✅ Generate Prisma client AFTER schema is available
 RUN npx prisma generate
 
-# Copy source and build
-COPY . .
+# Build Next.js app
 RUN npm run build
 
 ## Runtime image
