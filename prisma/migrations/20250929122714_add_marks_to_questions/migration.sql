@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `TestQuestion` ADD COLUMN `marks` INTEGER NOT NULL DEFAULT 1;

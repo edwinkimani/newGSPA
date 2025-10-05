@@ -1,0 +1,594 @@
+// Consolidated Prisma schema converted from repository SQL scripts
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// User and authentication
+model User {
+  id          String    @id @default(uuid())
+  email       String    @unique
+  password    String
+  isVerified  Boolean   @default(false)
+  verifyToken String?   @unique
+  resetToken  String?   @unique
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  lastLogin   DateTime?
+  loginCount  Int       @default(0)
+
+  profile                 Profile?
+  testAttempts            TestAttempt[]
+  ongoingTest             OngoingTest?
+  enrollments             ModuleEnrollment[]
+  createdModules          Module[]              @relation("ModuleCreatedBy")
+  // Opposite relation fields for models referencing User
+  moduleContentsCreated   ModuleContent[]       @relation("ModuleContentCreatedBy")
+  subTopicContentsCreated SubTopicContent[]     @relation("SubTopicContentCreatedBy")
+  userProgresses          UserProgress[]
+  respondedMessages       ContactMessage[]
+  siteAnalytics           SiteAnalytics[]
+  generatedReports        Report[]
+  createdExamConfigs      ExamConfiguration[]
+  userExams               UserExam[]
+  certificateTemplates    CertificateTemplate[]
+  subTopicTestResults     SubTopicTestResult[]
+  levelTestResults        LevelTestResult[]
+}
+
+model Profile {
+  id                     String        @id
+  user                   User          @relation(fields: [id], references: [id], onDelete: Cascade)
+  firstName              String
+  lastName               String
+  passportPhotoUrl       String?
+  nationality            String
+  gender                 Gender
+  dateOfBirth            DateTime
+  phoneNumber            String
+  email                  String
+  designation            String
+  organizationName       String
+  documentType           DocumentType
+  documentNumber         String
+  signatureData          String?
+  declarationAccepted    Boolean       @default(false)
+  membershipFeePaid      Boolean       @default(false)
+  paymentStatus          PaymentStatus @default(PENDING)
+  paymentReference       String?
+  testCompleted          Boolean       @default(false)
+  testScore              Int?
+  certificateIssued      Boolean       @default(false)
+  certificateUrl         String?
+  certificateAvailableAt DateTime?
+  roleId                 String?
+  role                   Role?         @relation(fields: [roleId], references: [id])
+  isActive               Boolean       @default(true)
+  lastLoginAt            DateTime?
+  loginCount             Int           @default(0)
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+}
+
+// Roles and permissions
+model Role {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  displayName String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  profiles    Profile[]
+  permissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  displayName String
+  description String?
+  resource    String
+  action      String
+  createdAt   DateTime @default(now())
+
+  roles RolePermission[]
+}
+
+model RolePermission {
+  id           String     @id @default(uuid())
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+  createdAt    DateTime   @default(now())
+
+  @@unique([roleId, permissionId])
+}
+
+// Questions and options
+model TestQuestion {
+  id                 String           @id @default(uuid())
+  question           String           @db.Text
+  category           String
+  subjectModel       String? // Subject area identifier (e.g., 'cybersecurity', 'networking')
+  difficulty         Difficulty
+  marks              Int              @default(1) // Marks assigned to this question
+  isActive           Boolean          @default(true)
+  optionsCount       Int              @default(4)
+  usesDynamicOptions Boolean          @default(false)
+  options            QuestionOption[]
+  moduleId           String?
+  module             Module?          @relation(fields: [moduleId], references: [id])
+  // Test model association
+  modelType          String? // 'subtopic', 'level', 'module', 'exam'
+  modelId            String? // ID of the associated test model
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+}
+
+model QuestionOption {
+  id           String       @id @default(uuid())
+  questionId   String
+  question     TestQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  optionText   String
+  optionLetter String
+  isCorrect    Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @default(now())
+}
+
+// Attempts and ongoing tests
+model TestAttempt {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionsData  Json
+  answersData    Json
+  score          Int
+  totalQuestions Int
+  passed         Boolean
+  completedAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+}
+
+model OngoingTest {
+  id              String   @id @default(uuid())
+  userId          String   @unique
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  questionsData   Json
+  answersData     Json     @default("{}")
+  currentQuestion Int      @default(0)
+  timeLeft        Int      @default(3600)
+  testStarted     Boolean  @default(false)
+  startedAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+// Modules, content, enrollments
+model Module {
+  id                 String             @id @default(uuid())
+  title              String
+  description        String             @db.Text
+  shortDescription   String?
+  category           String
+  difficultyLevel    DifficultyLevel
+  estimatedDuration  Int?
+  price              Decimal            @db.Decimal(10, 2)
+  currency           String             @default("USD")
+  isActive           Boolean            @default(true)
+  isFeatured         Boolean            @default(false)
+  thumbnailUrl       String?
+  prerequisites      Json?
+  learningObjectives Json?
+  createdById        String
+  createdBy          User               @relation("ModuleCreatedBy", fields: [createdById], references: [id])
+  instructorName     String?
+  instructorBio      String?            @db.Text
+  instructorImageUrl String?
+  coverImageUrl      String?
+  videoPreviewUrl    String?
+  startDate          DateTime?
+  endDate            DateTime?
+  enrollmentDeadline DateTime?
+  maxStudents        Int?
+  modulesContent     ModuleContent[]
+  questions          TestQuestion[]
+  enrollments        ModuleEnrollment[]
+  levels             Level[]
+  moduleTest         ModuleTest?
+  subTopicTestResults SubTopicTestResult[]
+  levelTestResults   LevelTestResult[]
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+}
+
+model ModuleContent {
+  id              String         @id @default(uuid())
+  moduleId        String
+  module          Module         @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  contentType     ContentType
+  contentUrl      String?
+  contentText     String?
+  durationMinutes Int?
+  isRequired      Boolean        @default(true)
+  orderIndex      Int            @default(0)
+  isLocked        Boolean        @default(true)
+  isPublished     Boolean        @default(false)
+  publishedAt     DateTime?
+  createdById     String
+  createdBy       User           @relation("ModuleContentCreatedBy", fields: [createdById], references: [id])
+  // User progress entries for this content
+  userProgresses  UserProgress[]
+  levelId         String?
+  level           Level?         @relation(fields: [levelId], references: [id])
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+}
+
+model Level {
+  id                 String          @id @default(uuid())
+  moduleId           String
+  module             Module          @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title              String
+  description        String?
+  orderIndex         Int             @default(0)
+  isActive           Boolean         @default(true)
+  estimatedDuration  Int?
+  learningObjectives Json?
+  contents           ModuleContent[]
+  subTopics          SubTopic[]
+  levelTest          LevelTest?
+  subTopicTestResults SubTopicTestResult[]
+  levelTestResults   LevelTestResult[]
+  createdAt          DateTime        @default(now())
+  updatedAt          DateTime        @updatedAt
+}
+
+model LevelTest {
+  id             String   @id @default(uuid())
+  levelId        String   @unique
+  level          Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  questions      Json // Array of question IDs or question objects
+  totalQuestions Int
+  passingScore   Int      @default(70)
+  timeLimit      Int      @default(1800) // 30 minutes default
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Test results for this level test
+  testResults    LevelTestResult[]
+}
+
+model LevelTestResult {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  levelTestId    String
+  levelTest      LevelTest @relation(fields: [levelTestId], references: [id], onDelete: Cascade)
+  moduleId       String
+  module         Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  levelId        String
+  level          Level    @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  score          Int // Percentage score (0-100)
+  totalQuestions Int
+  correctAnswers Int
+  answers        Json // User's answers data
+  passed         Boolean
+  timeSpent      Int? // Time spent in seconds
+  completedAt    DateTime @default(now())
+  createdAt      DateTime @default(now())
+
+  @@unique([userId, levelTestId]) // One result per user per test
+}
+
+model SubTopic {
+  id                 String            @id @default(uuid())
+  levelId            String
+  level              Level             @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  title              String
+  description        String?
+  orderIndex         Int               @default(0)
+  isActive           Boolean           @default(true)
+  estimatedDuration  Int?
+  learningObjectives Json?
+  readingMaterial    String?           @db.Text
+  attachments        Json?             @default("[]")
+  externalLinks      Json?             @default("[]")
+  contents           SubTopicContent[]
+  subTopicTest       SubTopicTest?
+  subTopicTestResults SubTopicTestResult[]
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+}
+
+model SubTopicContent {
+  id              String      @id @default(uuid())
+  subTopicId      String
+  subTopic        SubTopic    @relation(fields: [subTopicId], references: [id], onDelete: Cascade)
+  title           String
+  description     String?
+  contentType     ContentType
+  contentUrl      String?
+  contentText     String?     @db.Text
+  durationMinutes Int?
+  isRequired      Boolean     @default(true)
+  orderIndex      Int         @default(0)
+  isPublished     Boolean     @default(false)
+  publishedAt     DateTime?
+  createdById     String
+  createdBy       User        @relation("SubTopicContentCreatedBy", fields: [createdById], references: [id])
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+}
+
+model SubTopicTest {
+  id             String   @id @default(uuid())
+  subTopicId     String   @unique
+  subTopic       SubTopic @relation(fields: [subTopicId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  questions      Json // Array of question IDs or question objects
+  totalQuestions Int
+  passingScore   Int      @default(70)
+  timeLimit      Int      @default(600) // 10 minutes default
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Test results for this sub-topic test
+  testResults    SubTopicTestResult[]
+}
+
+model SubTopicTestResult {
+  id             String         @id @default(uuid())
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subTopicTestId String
+  subTopicTest   SubTopicTest   @relation(fields: [subTopicTestId], references: [id], onDelete: Cascade)
+  moduleId       String
+  module         Module         @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  levelId        String
+  level          Level          @relation(fields: [levelId], references: [id], onDelete: Cascade)
+  subTopicId     String
+  subTopic       SubTopic       @relation(fields: [subTopicId], references: [id], onDelete: Cascade)
+  score          Int // Percentage score (0-100)
+  totalQuestions Int
+  correctAnswers Int
+  answers        Json // User's answers data
+  passed         Boolean
+  timeSpent      Int? // Time spent in seconds
+  completedAt    DateTime       @default(now())
+  createdAt      DateTime       @default(now())
+
+  @@unique([userId, subTopicTestId]) // One result per user per test
+}
+
+model ModuleTest {
+  id             String   @id @default(uuid())
+  moduleId       String   @unique
+  module         Module   @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  title          String
+  description    String?
+  questions      Json // Array of question IDs or question objects
+  totalQuestions Int
+  passingScore   Int      @default(70)
+  timeLimit      Int      @default(3600) // 60 minutes default
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model ModuleEnrollment {
+  id                 String        @id @default(uuid())
+  userId             String
+  user               User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  moduleId           String
+  module             Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  enrollmentDate     DateTime      @default(now())
+  paymentStatus      PaymentStatus
+  paymentReference   String?
+  progressPercentage Float         @default(0)
+  completedAt        DateTime?
+  certificateIssued  Boolean       @default(false)
+  certificateUrl     String?
+  examDate           DateTime?
+  examCompleted      Boolean       @default(false)
+  examScore          Int?
+  completedSubTopics Json?         // Array of completed subtopic IDs
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+
+  // progress entries for this enrollment
+  userProgresses UserProgress[]
+
+  @@unique([userId, moduleId])
+}
+
+model UserProgress {
+  id                 String           @id @default(uuid())
+  userId             String
+  user               User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  enrollmentId       String
+  enrollment         ModuleEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  contentId          String
+  content            ModuleContent    @relation(fields: [contentId], references: [id], onDelete: Cascade)
+  progressPercentage Float            @default(0)
+  completed          Boolean          @default(false)
+  timeSpentMinutes   Int              @default(0)
+  lastAccessedAt     DateTime         @default(now())
+  completedAt        DateTime?
+  createdAt          DateTime         @default(now())
+  updatedAt          DateTime         @updatedAt
+
+  @@unique([userId, contentId])
+}
+
+model ContactMessage {
+  id            String        @id @default(uuid())
+  firstName     String
+  lastName      String
+  email         String
+  subject       String
+  message       String        @db.Text
+  status        ContactStatus @default(UNREAD)
+  adminResponse String?
+  respondedAt   DateTime?
+  respondedById String?
+  respondedBy   User?         @relation(fields: [respondedById], references: [id])
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+}
+
+model SiteAnalytics {
+  id        String   @id @default(uuid())
+  eventType String
+  eventData Json?
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id])
+  sessionId String?
+  ipAddress String?
+  userAgent String?
+  referrer  String?
+  createdAt DateTime @default(now())
+}
+
+model Report {
+  id            String   @id @default(uuid())
+  title         String
+  description   String?
+  reportType    String
+  parameters    Json?
+  generatedById String
+  generatedBy   User     @relation(fields: [generatedById], references: [id])
+  generatedAt   DateTime @default(now())
+  reportData    Json?
+  fileUrl       String?
+  createdAt     DateTime @default(now())
+}
+
+model ExamConfiguration {
+  id             String   @id @default(uuid())
+  name           String
+  description    String?
+  questions      Json
+  totalQuestions Int
+  passingScore   Int      @default(70)
+  timeLimit      Int      @default(3600)
+  isActive       Boolean  @default(true)
+  createdById    String?
+  createdBy      User?    @relation(fields: [createdById], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  // Opposite relation for UserExam
+  userExams UserExam[]
+}
+
+model UserExam {
+  id                  String            @id @default(uuid())
+  userId              String
+  user                User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  examConfigurationId String
+  examConfiguration   ExamConfiguration @relation(fields: [examConfigurationId], references: [id], onDelete: Cascade)
+  assignedAt          DateTime          @default(now())
+  availableFrom       DateTime?
+  availableUntil      DateTime?
+  isCompleted         Boolean           @default(false)
+  completedAt         DateTime?
+  score               Int?
+  passed              Boolean?
+  createdAt           DateTime          @default(now())
+  updatedAt           DateTime          @updatedAt
+
+  @@unique([userId, examConfigurationId])
+}
+
+model CertificateTemplate {
+  id                     String   @id @default(uuid())
+  name                   String
+  institutionName        String   @default("Global Security Institute")
+  certificateTitle       String   @default("Certificate of Excellence")
+  certificationType      String   @default("Security Professional Certification")
+  achievementDescription String   @db.Text
+  directorName           String
+  directorTitle          String
+  institutionAddress     String?
+  logoUrl                String?
+  signatureUrl           String?
+  backgroundColor        String   @default("#fefefe")
+  primaryColor           String   @default("#1a2332")
+  secondaryColor         String   @default("#c9aa68")
+  isActive               Boolean  @default(true)
+  createdById            String?
+  createdBy              User?    @relation(fields: [createdById], references: [id])
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @default(now())
+}
+
+// Enums
+enum Gender {
+  MALE
+  FEMALE
+  OTHER
+}
+
+enum DocumentType {
+  PASSPORT
+  NATIONAL_ID
+  DRIVERS_LICENSE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum Difficulty {
+  EASY
+  MEDIUM
+  HARD
+}
+
+enum DifficultyLevel {
+  BEGINNER
+  INTERMEDIATE
+  ADVANCED
+}
+
+enum MessageStatus {
+  PENDING
+  READ
+  RESPONDED
+  ARCHIVED
+}
+
+enum ContentType {
+  VIDEO
+  DOCUMENT
+  QUIZ
+  ASSIGNMENT
+  LIVE_SESSION
+  NOTES
+  STUDY_GUIDE
+  TEXT
+}
+
+enum ContactStatus {
+  UNREAD
+  READ
+  RESPONDED
+}
