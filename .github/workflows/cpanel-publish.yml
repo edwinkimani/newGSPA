@@ -1,0 +1,80 @@
+name: Deploy to cPanel via FTP
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  ftp-deploy:
+    name: FTP Deploy
+    runs-on: ubuntu-latest
+
+    steps:
+      # ✅ Checkout your code
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      # ✅ Set up Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # ✅ Generate .env.production for public variables
+      - name: Generate .env.production
+        run: |
+          echo "NEXT_PUBLIC_SITE_URL=https://globalsecurityalliance.org" >> .env.production
+          echo "NEXT_PUBLIC_APP_URL=https://globalsecurityalliance.org" >> .env.production
+          echo "NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}" >> .env.production
+          echo "NEXT_PUBLIC_SUPABASE_URL=https://quintjtreswyjxxogcjt.supabase.co" >> .env.production
+          echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" >> .env.production
+
+      # ✅ Install dependencies, generate Prisma client, seed DB, and build
+      - name: Install, Generate Prisma Client, Seed DB, Build
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          TOKEN_EXPIRY: ${{ secrets.TOKEN_EXPIRY }}
+          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
+          GMAIL_USER: ${{ secrets.GMAIL_USER }}
+          GMAIL_PASS: ${{ secrets.GMAIL_PASS }}
+          EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
+          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+        run: |
+          npm ci
+          npx prisma generate
+          npx prisma db seed
+          npm run build
+
+      # ✅ Clean up unnecessary files before deployment
+      - name: Prepare Deployment Directory
+        run: |
+          rm -rf node_modules
+          rm -rf .git
+          rm -rf prisma
+          rm -rf .github
+          rm -f .env
+          rm -f .env.local
+          rm -f .env.development
+          rm -f README.md
+
+      # ✅ Deploy via FTP
+      - name: Deploy via FTP
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          server-dir: /public_html/
+          local-dir: ./
+          exclude: |
+            .git/*
+            node_modules/*
+            .env
+            .env.local
+            .env.development
+            README.md
