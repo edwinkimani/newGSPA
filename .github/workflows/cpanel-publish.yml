@@ -67,10 +67,10 @@ jobs:
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: globalsecurityalliance.org
-          username: gspa_production@globalsecurityalliance.org
+          username: gspa_production
           password: qfQsaY9-vuGx
-          protocol: ftp        # Add this line
-          port: 21
+          protocol: ftps        # Changed to FTPS for cPanel security
+          port: 990            # FTPS port
           server-dir: /newGSPA/
           local-dir: ./
           exclude: |
