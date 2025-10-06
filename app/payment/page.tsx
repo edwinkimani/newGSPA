@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import dynamic from "next/dynamic"
 import Navigation from "@/components/navigation"
 import { Footer } from "@/components/footer"
 import { Button } from "@/components/ui/button"
@@ -11,8 +10,6 @@ import { CreditCard, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
 import { fetchJson, apiFetch } from '@/lib/api/client'
 import { useRouter } from "next/navigation"
 import { signIn } from 'next-auth/react'
-
-const PaystackButton = dynamic(() => import("react-paystack").then((mod) => mod.PaystackButton), { ssr: false })
 
 interface UserProfile {
   id: string
@@ -31,24 +28,49 @@ interface Module {
 }
 
 export default function PaymentPage() {
-   const [user, setUser] = useState<UserProfile | null>(null)
-   const [module, setModule] = useState<Module | null>(null)
-   const [isLoading, setIsLoading] = useState(true)
-   const [paymentSuccess, setPaymentSuccess] = useState(false)
-   const [paymentType, setPaymentType] = useState<'membership' | 'test' | 'retake' | 'module'>('membership')
-   const router = useRouter()
+    const [user, setUser] = useState<UserProfile | null>(null)
+    const [module, setModule] = useState<Module | null>(null)
+    const [isLoading, setIsLoading] = useState(true)
+    const [paymentSuccess, setPaymentSuccess] = useState(false)
+    const [paymentType, setPaymentType] = useState<'membership' | 'test' | 'retake' | 'module'>('membership')
+    const [initializingPayment, setInitializingPayment] = useState(false)
+    const router = useRouter()
   // use REST API client
 
    const PAYSTACK_PUBLIC_KEY = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || "pk_test_your_key_here"
-   const MEMBERSHIP_FEE = 700000 // 70 USD in cents
-   const TEST_FEE = 650000 // 65 USD in cents
-   const RETAKE_FEE = 455000 // 45 USD in cents
+     const MEMBERSHIP_FEE = 7000 // 70 USD in cents
+     const TEST_FEE = 6500 // 65 USD in cents
+     const RETAKE_FEE = 4550 // 45 USD in cents
 
   useEffect(() => {
     const getUserProfile = async () => {
       const urlParams = new URLSearchParams(window.location.search)
       const requestedType = urlParams.get('type') as 'membership' | 'test' | 'retake' | 'module' | null
       const moduleId = urlParams.get('moduleId')
+      const reference = urlParams.get('reference')
+
+      // Handle payment verification if returning from Paystack
+      if (reference) {
+        try {
+          const verifyResponse = await fetch(`/api/paystack/verify?reference=${reference}`)
+          const verifyData = await verifyResponse.json()
+
+          if (verifyResponse.ok && verifyData.data.status === 'success') {
+            // Payment successful, proceed with success handling
+            await handlePaymentSuccess({ reference })
+            return
+          } else {
+            alert('Payment verification failed. Please contact support.')
+            router.push('/payment')
+            return
+          }
+        } catch (error) {
+          console.error('Payment verification error:', error)
+          alert('Payment verification failed. Please contact support.')
+          router.push('/payment')
+          return
+        }
+      }
 
       const registrationUserId = localStorage.getItem('registration-user-id')
 
@@ -191,12 +213,46 @@ export default function PaymentPage() {
     console.log("Payment cancelled")
   }
 
+  const handleInitializePayment = async () => {
+    if (!user) return
+
+    setInitializingPayment(true)
+    try {
+      const response = await fetch('/api/paystack/initialize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: user.email,
+          amount: getAmount(),
+          reference: paystackConfig.reference,
+          metadata: paystackConfig.metadata,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to initialize payment')
+      }
+
+      // Redirect to Paystack payment page
+      window.location.href = data.data.authorization_url
+    } catch (error) {
+      console.error('Payment initialization error:', error)
+      alert('Failed to initialize payment. Please try again.')
+    } finally {
+      setInitializingPayment(false)
+    }
+  }
+
   const getAmount = () => {
     switch (paymentType) {
       case 'membership': return MEMBERSHIP_FEE
       case 'test': return TEST_FEE
       case 'retake': return RETAKE_FEE
-      case 'module': return module ? module.price_kes * 100 : 0 // Convert to cents
+      case 'module': return module ? module.price_usd * 100 : 0 // Convert to cents
       default: return MEMBERSHIP_FEE
     }
   }
@@ -352,10 +408,10 @@ export default function PaymentPage() {
                 </div>
 
                 <div className="border rounded-lg p-6">
-                  <div className="flex justify-between items-center mb-4">
-                    <span className="text-lg font-semibold">{getPaymentTitle()}</span>
-                    <span className="text-2xl font-bold">KES {getAmount() / 100}</span>
-                  </div>
+                   <div className="flex justify-between items-center mb-4">
+                     <span className="text-lg font-semibold">{getPaymentTitle()}</span>
+                     <span className="text-2xl font-bold">${getAmount() / 100}</span>
+                   </div>
                   <p className="text-sm text-muted-foreground mb-4">
                     {paymentType === 'membership'
                       ? 'This fee covers GSPA membership, access to the security aptitude test, and membership benefits.'
@@ -366,22 +422,28 @@ export default function PaymentPage() {
                   </p>
 
                   <Alert>
-                    <AlertCircle className="h-4 w-4" />
-                    <AlertDescription>
-                      Payment is processed securely through Paystack. We accept Visa, Mastercard, and other major cards. All amounts in KES.
-                    </AlertDescription>
-                  </Alert>
+                     <AlertCircle className="h-4 w-4" />
+                     <AlertDescription>
+                       Payment is processed securely through Paystack. We accept Visa, Mastercard, and other major cards. All amounts in USD.
+                     </AlertDescription>
+                   </Alert>
                 </div>
 
                 <div className="pt-4">
-                  <PaystackButton
-                    {...paystackConfig}
-                    onSuccess={handlePaymentSuccess}
-                    onClose={handlePaymentClose}
-                    className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 px-4 py-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+                  <Button
+                    onClick={handleInitializePayment}
+                    disabled={initializingPayment}
+                    className="w-full h-12 px-4 py-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
                   >
-                    Pay ${getAmount() / 100} with Paystack
-                  </PaystackButton>
+                    {initializingPayment ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Initializing Payment...
+                      </>
+                    ) : (
+                      `Pay $${getAmount() / 100} with Paystack`
+                    )}
+                  </Button>
                 </div>
 
                 <div className="text-center text-sm text-muted-foreground">

@@ -1,7 +1,6 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import dynamic from "next/dynamic"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -9,8 +8,6 @@ import { CreditCard, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
 import { useSession } from "next-auth/react" // Keep import but don't use
-
-const PaystackButton = dynamic(() => import("react-paystack").then((mod) => mod.PaystackButton), { ssr: false })
 
 interface UserProfile {
   id: string
@@ -23,28 +20,53 @@ interface UserProfile {
 }
 
 export default function DashboardPaymentPage() {
-  const [user, setUser] = useState<UserProfile | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
-  const [paymentSuccess, setPaymentSuccess] = useState(false)
-  const [paymentType, setPaymentType] = useState<'membership' | 'test' | 'retake' | 'module'>('membership')
-  const [moduleId, setModuleId] = useState<string | null>(null)
-  const [examDate, setExamDate] = useState<string | null>(null)
-  const [moduleData, setModuleData] = useState<any>(null)
-  const [moduleDataLoading, setModuleDataLoading] = useState(false)
-  const router = useRouter()
-  const searchParams = useSearchParams()
-  const supabase = createClient()
+   const [user, setUser] = useState<UserProfile | null>(null)
+   const [isLoading, setIsLoading] = useState(true)
+   const [paymentSuccess, setPaymentSuccess] = useState(false)
+   const [paymentType, setPaymentType] = useState<'membership' | 'test' | 'retake' | 'module'>('membership')
+   const [moduleId, setModuleId] = useState<string | null>(null)
+   const [examDate, setExamDate] = useState<string | null>(null)
+   const [moduleData, setModuleData] = useState<any>(null)
+   const [moduleDataLoading, setModuleDataLoading] = useState(false)
+   const [initializingPayment, setInitializingPayment] = useState(false)
+   const router = useRouter()
+   const searchParams = useSearchParams()
+   const supabase = createClient()
 
   const PAYSTACK_PUBLIC_KEY = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || "pk_test_your_key_here"
-  const MEMBERSHIP_FEE = 700000 // 70 USD in cents
-  const TEST_FEE = 650000 // 65 USD in cents
-  const RETAKE_FEE = 455000 // 45 USD in cents
+   const MEMBERSHIP_FEE = 7000 // 70 USD in cents
+   const TEST_FEE = 6500 // 65 USD in cents
+   const RETAKE_FEE = 4550 // 45 USD in cents
 
   useEffect(() => {
     const getUserProfile = async () => {
       const requestedType = searchParams.get('type') as 'membership' | 'test' | 'retake' | 'module' | null
       const requestedModuleId = searchParams.get('moduleId')
       const requestedExamDate = searchParams.get('examDate')
+      const reference = searchParams.get('reference')
+
+      // Handle payment verification if returning from Paystack
+      if (reference) {
+        try {
+          const verifyResponse = await fetch(`/api/paystack/verify?reference=${reference}`)
+          const verifyData = await verifyResponse.json()
+
+          if (verifyResponse.ok && verifyData.data.status === 'success') {
+            // Payment successful, proceed with success handling
+            await handlePaymentSuccess({ reference })
+            return
+          } else {
+            alert('Payment verification failed. Please contact support.')
+            router.push('/dashboard/payment')
+            return
+          }
+        } catch (error) {
+          console.error('Payment verification error:', error)
+          alert('Payment verification failed. Please contact support.')
+          router.push('/dashboard/payment')
+          return
+        }
+      }
 
       // Use the same authentication as dashboard
       const res = await fetch('/api/auth/user')
@@ -229,6 +251,40 @@ export default function DashboardPaymentPage() {
     console.log("Payment cancelled")
   }
 
+  const handleInitializePayment = async () => {
+    if (!user) return
+
+    setInitializingPayment(true)
+    try {
+      const response = await fetch('/api/paystack/initialize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: user.email,
+          amount: getAmount(),
+          reference: paystackConfig.reference,
+          metadata: paystackConfig.metadata,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to initialize payment')
+      }
+
+      // Redirect to Paystack payment page
+      window.location.href = data.data.authorization_url
+    } catch (error) {
+      console.error('Payment initialization error:', error)
+      alert('Failed to initialize payment. Please try again.')
+    } finally {
+      setInitializingPayment(false)
+    }
+  }
+
   const getAmount = () => {
     switch (paymentType) {
       case 'membership': return MEMBERSHIP_FEE
@@ -400,15 +456,20 @@ export default function DashboardPaymentPage() {
             </div>
 
             <div className="pt-4">
-              <PaystackButton
-                {...paystackConfig}
-                onSuccess={handlePaymentSuccess}
-                onClose={handlePaymentClose}
-                disabled={getAmount() === 0}
-                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 h-12 px-4 py-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+              <Button
+                onClick={handleInitializePayment}
+                disabled={getAmount() === 0 || initializingPayment}
+                className="w-full h-12 px-4 py-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
               >
-                {getAmount() === 0 ? 'Loading payment details...' : `Pay $${getAmount() / 100} with Paystack`}
-              </PaystackButton>
+                {getAmount() === 0 ? 'Loading payment details...' : initializingPayment ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Initializing Payment...
+                  </>
+                ) : (
+                  `Pay $${getAmount() / 100} with Paystack`
+                )}
+              </Button>
             </div>
 
             <div className="text-center text-sm text-muted-foreground">
