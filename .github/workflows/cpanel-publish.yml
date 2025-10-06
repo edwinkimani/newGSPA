@@ -69,6 +69,8 @@ jobs:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftp        # Add this line
+          port: 21   
           server-dir: /newGSPA/
           local-dir: ./
           exclude: |
