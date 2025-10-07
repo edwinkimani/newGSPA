@@ -51,7 +51,7 @@ jobs:
           npx prisma db seed
           npm run build
 
-      # ✅ Clean up unnecessary files before deployment upload
+      # ✅ Clean up unnecessary files before deployment upload update cpanel
       - name: Prepare Deployment Directory
         run: |
           rm -rf node_modules
