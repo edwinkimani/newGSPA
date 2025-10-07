@@ -123,7 +123,7 @@ jobs:
             echo "✓ .next build directory preserved"
           fi
 
-      # ✅ Test network connectivity first
+      # ✅ Test network connectivity firstc
       - name: Test FTP Server Connectivity
         run: |
           nslookup ${{ secrets.FTP_SERVER }} || echo "DNS lookup failed"
