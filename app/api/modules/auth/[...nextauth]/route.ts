@@ -1,3 +1,2 @@
-// Re-export authOptions and handlers from the correct location
-export { authOptions } from "@/lib/auth/config"
+// Re-export handlers from the correct location
 export { GET, POST } from "../../../auth/[...nextauth]/route"
