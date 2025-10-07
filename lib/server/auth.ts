@@ -11,6 +11,6 @@ export function getUserFromAuthHeader(req: Request | NextRequest): AuthUser | nu
   const token = auth?.startsWith('Bearer ') ? auth.slice(7) : auth
   if (!token) return null
   const payload = verifyToken(token)
-  if (!payload) return null
-  return { id: payload.sub || payload.id, email: payload.email }
+  if (!payload || typeof payload !== 'object') return null
+  return { id: (payload as any).sub || (payload as any).id, email: (payload as any).email }
 }
