@@ -32,30 +32,20 @@ jobs:
           echo "NEXT_PUBLIC_SUPABASE_URL=https://quintjtreswyjxxogcjt.supabase.co" >> .env.production
           echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" >> .env.production
 
-      # ✅ Update next.config.js for static export (if not already done)
+      # ✅ Update next.config.js for static export
       - name: Configure Next.js for Static Export
         run: |
-          if [ -f "next.config.js" ]; then
-            echo "Next config already exists, checking configuration..."
-          else
-            echo "Creating next.config.js for static export..."
-            cat > next.config.js << EOF
-            /** @type {import('next').NextConfig} */
-            const nextConfig = {
-              output: 'export',
-              trailingSlash: true,
-              images: {
-                unoptimized: true
-              },
-              env: {
-                NEXT_PUBLIC_SITE_URL: 'https://globalsecurityalliance.org',
-                NEXT_PUBLIC_APP_URL: 'https://globalsecurityalliance.org',
-                NEXT_PUBLIC_SUPABASE_URL: 'https://quintjtreswyjxxogcjt.supabase.co'
-              }
+          cat > next.config.js << 'EOL'
+          /** @type {import('next').NextConfig} */
+          const nextConfig = {
+            output: 'export',
+            trailingSlash: true,
+            images: {
+              unoptimized: true
             }
-            module.exports = nextConfig
-            EOF
-          fi
+          }
+          module.exports = nextConfig
+          EOL
 
       # ✅ Install dependencies, generate Prisma client, seed DB, and build
       - name: Install, Generate Prisma Client, Seed DB, Build
@@ -79,7 +69,7 @@ jobs:
       # ✅ Create .htaccess for SPA routing
       - name: Create .htaccess for SPA
         run: |
-          cat > out/.htaccess << 'EOF'
+          cat > out/.htaccess << 'EOL'
           RewriteEngine On
           RewriteBase /
 
@@ -100,7 +90,7 @@ jobs:
             AddOutputFilterByType DEFLATE text/html text/plain text/css application/json
             AddOutputFilterByType DEFLATE application/javascript text/javascript
           </IfModule>
-          EOF
+          EOL
 
       # ✅ Clean up unnecessary files before deployment
       - name: Prepare Deployment Directory
@@ -130,7 +120,7 @@ jobs:
           nslookup ${{ secrets.FTP_SERVER }} || echo "DNS lookup failed"
           ping -c 3 ${{ secrets.FTP_SERVER }} || echo "Ping test failed"
 
-      # ✅ Deploy via FTP to PUBLIC_HTML (CHANGED)
+      # ✅ Deploy via FTP to PUBLIC_HTML
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -139,9 +129,9 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
           port: 21
-          server-dir: /public_html/  # CHANGED: Deploy to public_html instead of newGSPA
-          local-dir: ./out/          # CHANGED: Deploy the static export folder
-          dangerous-clean-slate: true  # CHANGED: Clean public_html before deployment
+          server-dir: /public_html/
+          local-dir: ./out/
+          dangerous-clean-slate: true
           exclude: |
             **/.git*
             **/.github/*
