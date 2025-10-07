@@ -26,7 +26,7 @@ import {
 } from "lucide-react"
 import { prisma } from '@/lib/prisma/client'
 import { getServerSession } from 'next-auth'
-import { authOptions } from '@/app/api/auth/[...nextauth]/route'
+import { authOptions } from '@/lib/auth/config'
 import { redirect, useRouter } from 'next/navigation'
 import Link from "next/link"
 

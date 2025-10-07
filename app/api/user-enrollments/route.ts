@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { getServerSession } from "next-auth"
 import { prisma } from "@/lib/prisma/client"
-import { authOptions } from "../auth/[...nextauth]/route"
+import { authOptions } from '@/lib/auth/config'
 
 // Helper function to calculate progress based on completed subtopics
 async function calculateModuleProgress(enrollmentId: string) {

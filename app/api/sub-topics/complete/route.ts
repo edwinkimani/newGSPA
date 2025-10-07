@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { prisma } from '@/lib/prisma/client'
-import { authOptions } from '../../auth/[...nextauth]/route'
+import { authOptions } from '@/lib/auth/config'
 
 // POST /api/sub-topics/complete - Mark a subtopic as completed for a user
 export async function POST(request: Request) {

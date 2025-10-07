@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { prisma } from '@/lib/prisma/client'
-import { authOptions } from '../../auth/[...nextauth]/route'
+import { authOptions } from '@/lib/auth/config'
 import bcrypt from 'bcryptjs'
 
 // POST /api/admin/users - Create a new user (admin only)

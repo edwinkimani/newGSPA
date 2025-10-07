@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { getServerSession } from 'next-auth'
 import { prisma } from '@/lib/prisma/client'
-import { authOptions } from '../auth/[...nextauth]/route'
+import { authOptions } from '@/lib/auth/config'
 
 // GET /api/contact-messages - Get all contact messages (admin only)
 export async function GET(request: Request) {
