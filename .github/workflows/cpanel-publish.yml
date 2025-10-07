@@ -32,20 +32,28 @@ jobs:
           echo "NEXT_PUBLIC_SUPABASE_URL=https://quintjtreswyjxxogcjt.supabase.co" >> .env.production
           echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" >> .env.production
 
-      # ✅ Update next.config.js for static export
-      - name: Configure Next.js for Static Export
+      # ✅ Remove static export from Next.js config for Node.js server
+      - name: Configure Next.js for Node.js Server
         run: |
-          cat > next.config.js << 'EOL'
-          /** @type {import('next').NextConfig} */
-          const nextConfig = {
-            output: 'export',
-            trailingSlash: true,
-            images: {
-              unoptimized: true
+          if [ -f "next.config.js" ]; then
+            # Remove output: 'export' if it exists
+            sed -i '/output:.*export/d' next.config.js
+            sed -i '/trailingSlash:.*true/d' next.config.js
+            sed -i '/images:.*{/,/}/d' next.config.js
+            echo "✓ Updated existing next.config.js for Node.js server"
+          else
+            # Create basic Next.js config
+            cat > next.config.js << 'EOL'
+            /** @type {import('next').NextConfig} */
+            const nextConfig = {
+              eslint: {
+                ignoreDuringBuilds: true
+              }
             }
-          }
-          module.exports = nextConfig
-          EOL
+            module.exports = nextConfig
+            EOL
+            echo "✓ Created next.config.js for Node.js server"
+          fi
 
       # ✅ Install dependencies, generate Prisma client, seed DB, and build
       - name: Install, Generate Prisma Client, Seed DB, Build
@@ -66,36 +74,52 @@ jobs:
           npx prisma db seed
           npm run build
 
-      # ✅ Create .htaccess for SPA routing
-      - name: Create .htaccess for SPA
+      # ✅ Create .htaccess for reverse proxy (to be deployed to public_html)
+      - name: Create Reverse Proxy .htaccess
         run: |
-          cat > out/.htaccess << 'EOL'
+          cat > public_html_htaccess << 'EOL'
           RewriteEngine On
-          RewriteBase /
 
-          # Handle client-side routing
-          RewriteCond %{REQUEST_FILENAME} !-f
-          RewriteCond %{REQUEST_FILENAME} !-d
-          RewriteRule . /index.html [L]
+          # Redirect HTTP to HTTPS
+          RewriteCond %{HTTPS} off
+          RewriteRule ^(.*)$ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
 
-          # Security headers
-          <IfModule mod_headers.c>
-            Header set X-Content-Type-Options nosniff
-            Header set X-Frame-Options DENY
-            Header set X-XSS-Protection "1; mode=block"
+          # Enable proxy modules
+          <IfModule mod_proxy.c>
+            <IfModule mod_proxy_http.c>
+              ProxyPreserveHost On
+              ProxyPass / http://localhost:3000/
+              ProxyPassReverse / http://localhost:3000/
+            </IfModule>
           </IfModule>
 
-          # Compression
-          <IfModule mod_deflate.c>
-            AddOutputFilterByType DEFLATE text/html text/plain text/css application/json
-            AddOutputFilterByType DEFLATE application/javascript text/javascript
-          </IfModule>
+          # Fallback if proxy modules are not available
+          RewriteCond %{REQUEST_URI} !^/\.well-known/
+          RewriteRule ^(.*)$ http://localhost:3000/$1 [P,L]
+
+          # Error document for proxy failures
+          ErrorDocument 502 "Application is starting up. Please try again in a moment."
+          ErrorDocument 503 "Application is undergoing maintenance. Please try again later."
           EOL
+
+      # ✅ Create package.json for production (if needed)
+      - name: Create Production package.json
+        run: |
+          if [ -f "package.json" ]; then
+            # Ensure start script exists for cPanel
+            if ! grep -q '"start"' package.json; then
+              # Add start script to existing package.json
+              npm pkg set scripts.start="next start -p 3000"
+              echo "✓ Added start script to package.json"
+            fi
+          else
+            echo "⚠️ No package.json found"
+          fi
 
       # ✅ Clean up unnecessary files before deployment
       - name: Prepare Deployment Directory
         run: |
-          # Remove files that shouldn't be deployed
+          # Remove development files but keep build artifacts
           rm -rf node_modules
           rm -rf .git
           rm -rf prisma
@@ -105,13 +129,10 @@ jobs:
           rm -f .env.development
           rm -f README.md
           
-          # Ensure out directory exists and has proper structure
-          if [ -d "out" ]; then
-            echo "✓ Out directory exists"
-            ls -la out/
-          else
-            echo "✗ No out directory found - checking build structure"
-            ls -la
+          # Keep .next folder for production
+          if [ -d ".next" ]; then
+            echo "✓ .next build directory preserved"
+            ls -la .next/
           fi
 
       # ✅ Test network connectivity first
@@ -120,8 +141,28 @@ jobs:
           nslookup ${{ secrets.FTP_SERVER }} || echo "DNS lookup failed"
           ping -c 3 ${{ secrets.FTP_SERVER }} || echo "Ping test failed"
 
-      # ✅ Deploy via FTP to PUBLIC_HTML
-      - name: Deploy via FTP
+      # ✅ Deploy App to Node.js Directory (/newGSPA/)
+      - name: Deploy App to Node.js Directory
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          server-dir: /newGSPA/
+          local-dir: ./
+          dangerous-clean-slate: false
+          exclude: |
+            **/.git*
+            **/.github/*
+            **/node_modules/*
+            **/.env*
+            **/README.md
+            **/prisma/*
+
+      # ✅ Deploy .htaccess to public_html for reverse proxy
+      - name: Deploy Reverse Proxy to public_html
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
@@ -130,12 +171,30 @@ jobs:
           protocol: ftps
           port: 21
           server-dir: /public_html/
-          local-dir: ./out/
+          local-dir: ./
           dangerous-clean-slate: true
-          exclude: |
-            **/.git*
-            **/.github/*
-            **/node_modules/*
-            **/.env*
-            **/README.md
-            **/prisma/*
+          include: |
+            public_html_htaccess
+        env:
+          FTP_DEPLOY_ACTION_RENAME: 'public_html_htaccess=>.htaccess'
+
+      # ✅ Create deployment success marker
+      - name: Create Deployment Marker
+        run: |
+          echo "Deployment completed: $(date)" > deployment-success.txt
+          echo "Branch: ${{ github.ref }}" >> deployment-success.txt
+          echo "Commit: ${{ github.sha }}" >> deployment-success.txt
+
+      # ✅ Upload deployment marker
+      - name: Upload Deployment Marker
+        uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+        with:
+          server: ${{ secrets.FTP_SERVER }}
+          username: ${{ secrets.FTP_USERNAME }}
+          password: ${{ secrets.FTP_PASSWORD }}
+          protocol: ftps
+          port: 21
+          server-dir: /newGSPA/
+          local-dir: ./
+          include: |
+            deployment-success.txt
