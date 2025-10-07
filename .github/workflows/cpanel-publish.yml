@@ -28,6 +28,7 @@ jobs:
           echo "NEXT_PUBLIC_SITE_URL=https://globalsecurityalliance.org" >> .env.production
           echo "NEXT_PUBLIC_APP_URL=https://globalsecurityalliance.org" >> .env.production
           echo "NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}" >> .env.production
+          echo "PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}" >> .env.production
           echo "NEXT_PUBLIC_SUPABASE_URL=https://quintjtreswyjxxogcjt.supabase.co" >> .env.production
           echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" >> .env.production
 
@@ -62,21 +63,28 @@ jobs:
           rm -f .env.development
           rm -f README.md
 
-      # ✅ Deploy via FTP
+      # ✅ Test network connectivity first
+      - name: Test FTP Server Connectivity
+        run: |
+          nslookup ${{ secrets.FTP_SERVER }} || echo "DNS lookup failed"
+          ping -c 3 ${{ secrets.FTP_SERVER }} || echo "Ping test failed"
+
+      # ✅ Deploy via FTP with additional options
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
           server: ${{ secrets.FTP_SERVER }}
           username: ${{ secrets.FTP_USERNAME }}
           password: ${{ secrets.FTP_PASSWORD }}
-          protocol: ftps        # Explicit FTPS on port 21
+          protocol: ftps
           port: 21
           server-dir: /newGSPA/
           local-dir: ./
+          dangerous-clean-slate: false
           exclude: |
-            .git/*
-            node_modules/*
-            .env
-            .env.local
-            .env.development
-            README.md
+            **/.git*
+            **/.github/*
+            **/node_modules/*
+            **/.env*
+            **/README.md
+            **/prisma/*
