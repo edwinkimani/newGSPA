@@ -32,6 +32,31 @@ jobs:
           echo "NEXT_PUBLIC_SUPABASE_URL=https://quintjtreswyjxxogcjt.supabase.co" >> .env.production
           echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}" >> .env.production
 
+      # ✅ Update next.config.js for static export (if not already done)
+      - name: Configure Next.js for Static Export
+        run: |
+          if [ -f "next.config.js" ]; then
+            echo "Next config already exists, checking configuration..."
+          else
+            echo "Creating next.config.js for static export..."
+            cat > next.config.js << EOF
+            /** @type {import('next').NextConfig} */
+            const nextConfig = {
+              output: 'export',
+              trailingSlash: true,
+              images: {
+                unoptimized: true
+              },
+              env: {
+                NEXT_PUBLIC_SITE_URL: 'https://globalsecurityalliance.org',
+                NEXT_PUBLIC_APP_URL: 'https://globalsecurityalliance.org',
+                NEXT_PUBLIC_SUPABASE_URL: 'https://quintjtreswyjxxogcjt.supabase.co'
+              }
+            }
+            module.exports = nextConfig
+            EOF
+          fi
+
       # ✅ Install dependencies, generate Prisma client, seed DB, and build
       - name: Install, Generate Prisma Client, Seed DB, Build
         env:
@@ -51,9 +76,36 @@ jobs:
           npx prisma db seed
           npm run build
 
-      # ✅ Clean up unnecessary files before deployment upload update cpanel
+      # ✅ Create .htaccess for SPA routing
+      - name: Create .htaccess for SPA
+        run: |
+          cat > out/.htaccess << 'EOF'
+          RewriteEngine On
+          RewriteBase /
+
+          # Handle client-side routing
+          RewriteCond %{REQUEST_FILENAME} !-f
+          RewriteCond %{REQUEST_FILENAME} !-d
+          RewriteRule . /index.html [L]
+
+          # Security headers
+          <IfModule mod_headers.c>
+            Header set X-Content-Type-Options nosniff
+            Header set X-Frame-Options DENY
+            Header set X-XSS-Protection "1; mode=block"
+          </IfModule>
+
+          # Compression
+          <IfModule mod_deflate.c>
+            AddOutputFilterByType DEFLATE text/html text/plain text/css application/json
+            AddOutputFilterByType DEFLATE application/javascript text/javascript
+          </IfModule>
+          EOF
+
+      # ✅ Clean up unnecessary files before deployment
       - name: Prepare Deployment Directory
         run: |
+          # Remove files that shouldn't be deployed
           rm -rf node_modules
           rm -rf .git
           rm -rf prisma
@@ -62,6 +114,15 @@ jobs:
           rm -f .env.local
           rm -f .env.development
           rm -f README.md
+          
+          # Ensure out directory exists and has proper structure
+          if [ -d "out" ]; then
+            echo "✓ Out directory exists"
+            ls -la out/
+          else
+            echo "✗ No out directory found - checking build structure"
+            ls -la
+          fi
 
       # ✅ Test network connectivity first
       - name: Test FTP Server Connectivity
@@ -69,7 +130,7 @@ jobs:
           nslookup ${{ secrets.FTP_SERVER }} || echo "DNS lookup failed"
           ping -c 3 ${{ secrets.FTP_SERVER }} || echo "Ping test failed"
 
-      # ✅ Deploy via FTP with additional options
+      # ✅ Deploy via FTP to PUBLIC_HTML (CHANGED)
       - name: Deploy via FTP
         uses: SamKirkland/FTP-Deploy-Action@v4.3.5
         with:
@@ -78,9 +139,9 @@ jobs:
           password: ${{ secrets.FTP_PASSWORD }}
           protocol: ftps
           port: 21
-          server-dir: /newGSPA/
-          local-dir: ./
-          dangerous-clean-slate: false
+          server-dir: /public_html/  # CHANGED: Deploy to public_html instead of newGSPA
+          local-dir: ./out/          # CHANGED: Deploy the static export folder
+          dangerous-clean-slate: true  # CHANGED: Clean public_html before deployment
           exclude: |
             **/.git*
             **/.github/*
