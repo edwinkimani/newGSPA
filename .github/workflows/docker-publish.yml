@@ -74,14 +74,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify prisma directory
+      - name: Verify project structure
         run: |
           echo "🔍 Checking project structure..."
           ls -la
+          echo "📁 Checking for config files:"
+          ls -la *.mjs *.js *.json 2>/dev/null || echo "No config files found"
           if [ ! -d "prisma" ]; then
             echo "❌ prisma directory not found - creating it"
             mkdir -p prisma
-            # Create basic schema using echo commands instead of heredoc
+            # Create basic schema using echo commands
             echo 'generator client {' > prisma/schema.prisma
             echo '  provider = "prisma-client-js"' >> prisma/schema.prisma
             echo '}' >> prisma/schema.prisma
@@ -127,10 +129,12 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: .
+          file: ./Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
+          tags: ${{ steps.meta.outputs.tags }},${{ env.IMAGE_NAME }}:latest
           labels: ${{ steps.meta.outputs.labels }}
-          no-cache: true  # Disable cache to ensure fresh build
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   deploy-to-vps:
     needs: build-and-push
@@ -139,7 +143,7 @@ jobs:
 
     steps:
       - name: Wait for the image to be available
-        run: sleep 30
+        run: sleep 45
 
       - name: Get commit SHA for image tag
         id: sha
@@ -148,132 +152,139 @@ jobs:
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
-            host: ${{ secrets.SSH_HOST }}
-            username: ${{ secrets.SSH_USER }}
-            key: ${{ secrets.SSH_PRIVATE_KEY }}
-            port: ${{ secrets.SSH_PORT || 22 }}
-            script: |
-                set -e  # Exit on any error
-                
-                # Login to Docker Hub securely
-                echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
-                
-                # Navigate to app directory
-                cd /home/${{ secrets.SSH_USER }}/app
-                
-                # Create environment file
-                cat > .env << 'ENDFILE'
-                DATABASE_URL=mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@localhost:3306/${{ secrets.MYSQL_DATABASE }}
-                NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-                NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
-                JWT_SECRET=${{ secrets.JWT_SECRET }}
-                RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
-                PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
-                NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}
-                NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
-                NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
-                GMAIL_USER=${{ secrets.GMAIL_USER }}
-                GMAIL_PASS=${{ secrets.GMAIL_PASS }}
-                EMAIL_FROM=${{ secrets.EMAIL_FROM }}
-                SEED_ADMIN_EMAIL=admin@gspa.com
-                SEED_ADMIN_PASSWORD=Admin@123!
-                ENDFILE
-                
-                # Ensure MySQL service is running (with proper sudo handling)
-                echo "Starting MySQL service..."
-                sudo systemctl start mysql || echo "MySQL might already be running"
-                sudo systemctl enable mysql || echo "MySQL enable might have failed"
-                
-                # Stop and remove existing container if it exists
-                echo "Stopping existing container..."
-                docker stop gspa-app || echo "No container to stop"
-                docker rm gspa-app || echo "No container to remove"
-                
-                # Wait for Docker Hub image propagation
-                echo "Waiting for Docker Hub image propagation..."
-                sleep 30
-                
-                # Try multiple possible image tags
-                IMAGE_TAGS=("main" "main-${{ steps.sha.outputs.sha_short }}" "latest")
-                IMAGE_NAME="${{ env.IMAGE_NAME }}"
-                SELECTED_TAG=""
-                
-                echo "Attempting to pull Docker image with different tags..."
-                for TAG in "${IMAGE_TAGS[@]}"; do
-                    echo "Trying tag: $TAG"
-                    if docker pull $IMAGE_NAME:$TAG; then
-                    echo "✅ Successfully pulled image with tag: $TAG"
-                    SELECTED_TAG=$TAG
-                    break
-                    else
-                    echo "❌ Failed to pull with tag: $TAG"
-                    fi
-                done
-                
-                if [ -z "$SELECTED_TAG" ]; then
-                    echo "🚨 CRITICAL: Could not pull any Docker image!"
-                    echo "Available tags in repository:"
-                    # Try to list available tags (this might not work for private repos without additional auth)
-                    curl -s -H "Authorization: Bearer $(echo '${{ secrets.DOCKER_PASSWORD }}' | base64)" \
-                    "https://registry.hub.docker.com/v2/repositories/${{ secrets.DOCKER_USERNAME }}/my-gspa-app/tags/" | jq -r '.results[].name' || echo "Cannot list tags"
-                    exit 1
-                fi
-                
-                # Start the application
-                echo "Starting application container with tag: $SELECTED_TAG"
-                docker run -d \
-                    --name gspa-app \
-                    --env-file /home/${{ secrets.SSH_USER }}/app/.env \
-                    --network host \
-                    -p 80:3000 \
-                    --restart unless-stopped \
-                    $IMAGE_NAME:$SELECTED_TAG
-                
-                # Wait for app to start with health check
-                echo "Waiting for application to start..."
-                for i in {1..10}; do
-                    if docker ps | grep gspa-app | grep -q "Up"; then
-                    echo "✅ Container is running and healthy"
-                    break
-                    else
-                    echo "⏳ Container not ready yet... attempt $i/10"
-                    sleep 10
-                    fi
-                    if [ $i -eq 10 ]; then
-                    echo "⚠️ Container might be having issues starting"
-                    docker logs gspa-app || echo "Cannot get container logs"
-                    fi
-                done
-                
-                # Run Prisma migrations only if container is running
-                echo "Running database migrations..."
-                sleep 20  # Give app more time to initialize
-                if docker exec gspa-app npx prisma migrate deploy; then
-                    echo "✅ Migrations completed successfully"
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e  # Exit on any error
+            
+            # Login to Docker Hub securely
+            echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
+            
+            # Navigate to app directory
+            cd /home/${{ secrets.SSH_USER }}/app
+            
+            # Create environment file
+            cat > .env << 'ENDFILE'
+            DATABASE_URL=mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@localhost:3306/${{ secrets.MYSQL_DATABASE }}
+            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
+            NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}
+            NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
+            NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
+            GMAIL_USER=${{ secrets.GMAIL_USER }}
+            GMAIL_PASS=${{ secrets.GMAIL_PASS }}
+            EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+            SEED_ADMIN_EMAIL=admin@gspa.com
+            SEED_ADMIN_PASSWORD=Admin@123!
+            ENDFILE
+            
+            # Ensure MySQL service is running
+            echo "Starting MySQL service..."
+            sudo systemctl start mysql || echo "MySQL might already be running"
+            sudo systemctl enable mysql || echo "MySQL enable might have failed"
+            
+            # Stop and remove existing container if it exists
+            echo "Stopping existing container..."
+            docker stop gspa-app || echo "No container to stop"
+            docker rm gspa-app || echo "No container to remove"
+            
+            # Wait for Docker Hub image propagation
+            echo "Waiting for Docker Hub image propagation..."
+            sleep 30
+            
+            # Use the correct image tags (main and main-SHA, with latest as fallback)
+            IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            SHA_SHORT="${{ steps.sha.outputs.sha_short }}"
+            
+            echo "Pulling Docker image with tag: main"
+            if docker pull $IMAGE_NAME:main; then
+              echo "✅ Successfully pulled image with tag: main"
+              SELECTED_TAG="main"
+            else
+              echo "Trying tag: main-$SHA_SHORT"
+              if docker pull $IMAGE_NAME:main-$SHA_SHORT; then
+                echo "✅ Successfully pulled image with tag: main-$SHA_SHORT"
+                SELECTED_TAG="main-$SHA_SHORT"
+              else
+                echo "Trying fallback tag: latest"
+                if docker pull $IMAGE_NAME:latest; then
+                  echo "✅ Successfully pulled image with tag: latest"
+                  SELECTED_TAG="latest"
                 else
-                    echo "❌ Migrations failed, but continuing deployment"
+                  echo "🚨 CRITICAL: Could not pull any Docker image!"
+                  echo "Available tags for $IMAGE_NAME:"
+                  # Try to list available tags
+                  curl -s "https://registry.hub.docker.com/v2/repositories/${{ secrets.DOCKER_USERNAME }}/my-gspa-app/tags/?page_size=10" | jq -r '.results[].name' 2>/dev/null || echo "Cannot list tags - repository might be private"
+                  exit 1
                 fi
-                
-                # Run Prisma seeding
-                echo "Running database seeding..."
-                if docker exec gspa-app npm run db:seed; then
-                    echo "✅ Seeding completed successfully"
-                else
-                    echo "❌ Seeding failed, but continuing deployment"
-                fi
-                
-                # Final health check
-                echo "Performing final health check..."
+              fi
+            fi
+            
+            # Start the application
+            echo "Starting application container with tag: $SELECTED_TAG"
+            docker run -d \
+              --name gspa-app \
+              --env-file /home/${{ secrets.SSH_USER }}/app/.env \
+              --network host \
+              -p 80:3000 \
+              --restart unless-stopped \
+              $IMAGE_NAME:$SELECTED_TAG
+            
+            # Wait for app to start with health check
+            echo "Waiting for application to start..."
+            for i in {1..12}; do
+              if docker ps | grep gspa-app | grep -q "Up"; then
+                echo "✅ Container is running and healthy"
+                break
+              else
+                echo "⏳ Container not ready yet... attempt $i/12"
                 sleep 10
-                if curl -f http://localhost:3000/api/health; then
-                    echo "✅ Application is healthy"
-                else
-                    echo "⚠️ Health check failed but container is running"
-                    docker logs gspa-app --tail 50
-                fi
-                
-                # Clean up old images
-                echo "Cleaning up unused Docker images..."
-                docker image prune -f
-                
-                echo "🚀 Deployment completed successfully!"
+              fi
+              if [ $i -eq 12 ]; then
+                echo "⚠️ Container might be having issues starting"
+                docker logs gspa-app --tail 20 || echo "Cannot get container logs"
+              fi
+            done
+            
+            # Run Prisma migrations only if container is running
+            echo "Running database migrations..."
+            sleep 25  # Give app more time to initialize
+            if docker exec gspa-app npx prisma migrate deploy; then
+              echo "✅ Migrations completed successfully"
+            else
+              echo "❌ Migrations failed - checking container status..."
+              docker logs gspa-app --tail 30
+              echo "Continuing deployment despite migration failure"
+            fi
+            
+            # Run Prisma seeding
+            echo "Running database seeding..."
+            if docker exec gspa-app npm run db:seed; then
+              echo "✅ Seeding completed successfully"
+            else
+              echo "❌ Seeding failed - checking container status..."
+              docker logs gspa-app --tail 30
+              echo "Continuing deployment despite seeding failure"
+            fi
+            
+            # Final health check
+            echo "Performing final health check..."
+            sleep 15
+            if curl -f http://localhost:3000/api/health; then
+              echo "✅ Application is healthy"
+            else
+              echo "⚠️ Health check failed - checking container status..."
+              docker logs gspa-app --tail 30
+              echo "Container is running but health check failed"
+            fi
+            
+            # Clean up old images
+            echo "Cleaning up unused Docker images..."
+            docker image prune -f
+            
+            echo "🚀 Deployment completed successfully!"
