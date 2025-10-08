@@ -1,2 +1,2 @@
 -- AlterTable
-ALTER TABLE `moduleenrollment` ADD COLUMN `completedSubTopics` JSON NULL;
+ALTER TABLE `ModuleEnrollment` ADD COLUMN `completedSubTopics` JSON NULL;
