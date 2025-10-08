@@ -14,8 +14,7 @@
     "db:reset": "prisma migrate reset",
     "db:seed": "ts-node prisma/seeders/seed.ts",
     "db:studio": "prisma studio",
-    "test": "echo 'No tests specified'",
-    "postinstall": "prisma generate"
+    "test": "echo 'No tests specified'"
   },
   "dependencies": {
     "@auth/core": "latest",
