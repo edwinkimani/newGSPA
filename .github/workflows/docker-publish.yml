@@ -17,10 +17,10 @@ jobs:
       mysql:
         image: mysql:8.0
         env:
-          MYSQL_ROOT_PASSWORD: ${{ secrets.MYSQL_ROOT_PASSWORD }}
-          MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
-          MYSQL_USER: ${{ secrets.MYSQL_USER }}
-          MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
+          MYSQL_ROOT_PASSWORD: test_root_password
+          MYSQL_DATABASE: test_gspa_db
+          MYSQL_USER: test_user
+          MYSQL_PASSWORD: test_password
         ports:
           - 3306:3306
         options: --health-cmd="mysqladmin ping" --health-interval=10s --health-timeout=5s --health-retries=3
@@ -44,20 +44,20 @@ jobs:
       - name: Run database migrations
         run: npx prisma migrate deploy
         env:
-          DATABASE_URL: mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@localhost:3306/${{ secrets.MYSQL_DATABASE }}
+          DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_gspa_db
 
       - name: Run tests
         run: npm test
         env:
-          DATABASE_URL: mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@localhost:3306/${{ secrets.MYSQL_DATABASE }}
-          NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
-          JWT_SECRET: ${{ secrets.JWT_SECRET }}
-          RESEND_API_KEY: ${{ secrets.RESEND_API_KEY }}
-          PAYSTACK_SECRET_KEY: ${{ secrets.PAYSTACK_SECRET_KEY }}
-          NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: ${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}
-          NEXT_PUBLIC_SITE_URL: ${{ secrets.NEXT_PUBLIC_SITE_URL }}
-          NEXT_PUBLIC_APP_URL: ${{ secrets.NEXT_PUBLIC_APP_URL }}
+          DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_gspa_db
+          NEXTAUTH_SECRET: test-secret
+          NEXTAUTH_URL: http://localhost:3000
+          JWT_SECRET: test-jwt-secret
+          RESEND_API_KEY: test-resend-key
+          PAYSTACK_SECRET_KEY: test-paystack-secret
+          NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: test-paystack-public
+          NEXT_PUBLIC_SITE_URL: http://localhost:3000
+          NEXT_PUBLIC_APP_URL: http://localhost:3000
 
   build-and-push:
     needs: test
@@ -119,16 +119,16 @@ jobs:
             # Login to Docker Hub
             docker login -u '${{ secrets.DOCKER_USERNAME }}' -p '${{ secrets.DOCKER_PASSWORD }}'
             
-            # Pull latest image
-            docker pull ${{ env.IMAGE_NAME }}:latest
+            # Navigate to app directory
+            cd /home/${{ secrets.SSH_USER }}/app
             
-            # Stop and remove existing container
-            docker stop gspa-app || true
-            docker rm gspa-app || true
-            
-            # Create or update environment file with secrets
-            cat > /home/${{ secrets.SSH_USER }}/.gspa_env << EOF
-            DATABASE_URL=mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@localhost:3306/${{ secrets.MYSQL_DATABASE }}
+            # Create environment file with DOCKER MySQL connection
+            cat > .env << EOF
+            DATABASE_URL=mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@mysql:3306/${{ secrets.MYSQL_DATABASE }}
+            MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
+            MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
+            MYSQL_USER=${{ secrets.MYSQL_USER }}
+            MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
@@ -140,33 +140,26 @@ jobs:
             GMAIL_USER=${{ secrets.GMAIL_USER }}
             GMAIL_PASS=${{ secrets.GMAIL_PASS }}
             EMAIL_FROM=${{ secrets.EMAIL_FROM }}
-            MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
-            MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
-            MYSQL_USER=${{ secrets.MYSQL_USER }}
-            MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
             EOF
             
-            # Ensure MySQL is running and database exists
-            sudo systemctl start mysql || true
-            sleep 10
+            # Stop any running containers
+            docker-compose down || true
             
-            # Create database and user if they don't exist
-            mysql -u root -p${{ secrets.MYSQL_ROOT_PASSWORD }} -e "CREATE DATABASE IF NOT EXISTS ${{ secrets.MYSQL_DATABASE }};" || true
-            mysql -u root -p${{ secrets.MYSQL_ROOT_PASSWORD }} -e "CREATE USER IF NOT EXISTS '${{ secrets.MYSQL_USER }}'@'localhost' IDENTIFIED BY '${{ secrets.MYSQL_PASSWORD }}';" || true
-            mysql -u root -p${{ secrets.MYSQL_ROOT_PASSWORD }} -e "GRANT ALL PRIVILEGES ON ${{ secrets.MYSQL_DATABASE }}.* TO '${{ secrets.MYSQL_USER }}'@'localhost';" || true
-            mysql -u root -p${{ secrets.MYSQL_ROOT_PASSWORD }} -e "FLUSH PRIVILEGES;" || true
+            # Pull latest app image
+            docker-compose pull app
             
-            # Start the application
-            docker run -d \
-              --name gspa-app \
-              --env-file /home/${{ secrets.SSH_USER }}/.gspa_env \
-              -p 80:3000 \
-              --restart unless-stopped \
-              ${{ env.IMAGE_NAME }}:latest
+            # Start MySQL and app using docker-compose
+            docker-compose up -d mysql
             
-            # Run Prisma migrations
-            sleep 15  # Wait for app to start
-            docker exec gspa-app npx prisma migrate deploy
+            # Wait for MySQL to be ready
+            sleep 30
             
-            # Clean up old imagess
+            # Start the app
+            docker-compose up -d app
+            
+            # Wait for app to start, then run migrations
+            sleep 20
+            docker-compose exec -T app npx prisma migrate deploy
+            
+            # Clean up
             docker image prune -f
