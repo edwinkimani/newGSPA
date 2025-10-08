@@ -5,6 +5,7 @@ import { canAccessPage, type UserRole } from "@/lib/rbac"
 // Define public paths that don't require authentication
 const PUBLIC_PATHS = [
   "/",
+  "/about",
   "/contact",
   "/faq",
   "/privacy-policy",
