@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma/client'
 
+export const dynamic = 'force-dynamic'
+
 // GET /api/roles - Get all available roles
 export async function GET() {
   try {

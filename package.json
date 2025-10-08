@@ -63,7 +63,7 @@
     "jsonwebtoken": "latest",
     "jspdf": "latest",
     "lucide-react": "^0.454.0",
-    "next": "latest",
+    "next": "14.2.16",
     "next-auth": "latest",
     "next-themes": "latest",
     "nodemailer": "latest",
