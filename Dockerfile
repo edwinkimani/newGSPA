@@ -19,8 +19,7 @@ RUN npx prisma generate
 COPY . .
 RUN npm run build
 
-# Compile seed script for production
-RUN npx tsc prisma/seeders/seed.ts --outDir dist --target es2020 --module commonjs --esModuleInterop
+# Note: Seed script is run by the deployment workflow, not in container
 
 ### Production image
 FROM node:20-bullseye-slim AS runner
@@ -44,12 +43,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/package.json ./package.json
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 
-# Copy compiled seed file
-COPY --from=builder --chown=nextjs:nodejs /app/dist/prisma/seeders/seed.js ./prisma/seeders/
 
 # Copy necessary config files
-COPY --from=builder --chown=nextjs:nodejs /app/next.config.js ./
-COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./
+COPY next.config.js ./
+COPY tsconfig.json ./
 
 # Set proper permissions
 RUN chown -R nextjs:nodejs /app && \
