@@ -168,5 +168,5 @@ jobs:
             sleep 15  # Wait for app to start
             docker exec gspa-app npx prisma migrate deploy
             
-            # Clean up old images
+            # Clean up old imagess
             docker image prune -f
