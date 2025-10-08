@@ -74,6 +74,36 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify and create prisma directory if missing
+        run: |
+          echo "🔍 Checking project structure..."
+          ls -la
+          if [ ! -d "prisma" ]; then
+            echo "❌ prisma directory not found - creating it"
+            mkdir -p prisma
+            # Create basic schema
+            cat > prisma/schema.prisma << 'EOF'
+            generator client {
+              provider = "prisma-client-js"
+            }
+
+            datasource db {
+              provider = "mysql"
+              url      = env("DATABASE_URL")
+            }
+
+            model Example {
+              id   Int    @id @default(autoincrement())
+              name String
+            }
+            EOF
+            echo "✅ Created prisma directory with basic schema"
+          else
+            echo "✅ prisma directory exists"
+            echo "📁 Contents of prisma directory:"
+            ls -la prisma/
+          fi
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
