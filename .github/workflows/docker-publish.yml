@@ -211,10 +211,10 @@ jobs:
                         --restart unless-stopped \
                         mysql:8.0
 
-                    # Wait for MySQL to be ready
-                    echo "Waiting for MySQL to be ready..."
+                    # Wait for MySQL to initialize (inside container)
+                    echo "Waiting for MySQL (inside container) to accept connections..."
                     for i in {1..30}; do
-                        if mysql -h localhost -P 3307 -u root -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1;" > /dev/null 2>&1; then
+                        if docker exec mysql-gspa mysqladmin ping -uroot -p"$MYSQL_ROOT_PASSWORD" --silent >/dev/null 2>&1; then
                         echo "✅ MySQL is ready!"
                         break
                         else
@@ -226,6 +226,24 @@ jobs:
                         exit 1
                         fi
                     done
+
+                    # Ensure deploy DB user exists (using container root account)
+                    echo "Ensuring deploy DB user exists..."
+                    docker exec mysql-gspa mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "CREATE USER IF NOT EXISTS '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD'; GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'%'; FLUSH PRIVILEGES;" || {
+                      echo "⚠️ Failed to create/ensure DB user; check credentials and logs"
+                      docker logs mysql-gspa --tail 50
+                      exit 1
+                    }
+
+                    # Verify deploy user can authenticate
+                    echo "Verifying deploy user authentication..."
+                    if docker exec mysql-gspa mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "SELECT 1;" >/dev/null 2>&1; then
+                      echo "✅ Deploy user authenticated successfully"
+                    else
+                      echo "❌ Deploy user authentication failed; dumping MySQL users for debug"
+                      docker exec mysql-gspa mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SELECT User, Host FROM mysql.user;"
+                      exit 1
+                    fi
 
                     echo "✅ MySQL Docker container setup complete"
                     
@@ -331,7 +349,7 @@ jobs:
                     
                     # Verify database was created and has tables
                     echo "Verifying database setup..."
-                    mysql -h localhost -P 3307 -u root -p"$MYSQL_ROOT_PASSWORD" -e "USE $MYSQL_DATABASE; SHOW TABLES;" || echo "Could not verify database tables"
+                    MYSQL_PWD="$MYSQL_PASSWORD" mysql -h localhost -P 3307 -u "$MYSQL_USER" -e "USE $MYSQL_DATABASE; SHOW TABLES;" || echo "Could not verify database tables"
                     
                     # Final health check
                     echo "Performing final health check..."
