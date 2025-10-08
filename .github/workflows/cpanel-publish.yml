@@ -107,7 +107,7 @@ jobs:
       # ✅ Update package.json for cPanel
       - name: Update Package.json for cPanel
         run: |
-          npm pkg set scripts.start="node server.js"
+          npm pkg set scripts.start="NODE_OPTIONS=--max-old-space-size=512 node server.js"
           echo "✓ Updated start script in package.json"
 
       # ✅ Create .htaccess for reverse proxy in a separate folder

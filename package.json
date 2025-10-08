@@ -7,10 +7,14 @@
     "dev": "next dev",
     "lint": "next lint",
     "start": "next start",
+    "db:generate": "prisma generate",
+    "db:init": "prisma init",
     "db:migrate": "prisma migrate dev",
+    "db:push": "prisma db push",
     "db:reset": "prisma migrate reset",
     "db:seed": "ts-node prisma/seeders/seed.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@auth/core": "latest",
