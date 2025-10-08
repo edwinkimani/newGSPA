@@ -44,7 +44,11 @@ jobs:
           const nextConfig = {
             eslint: {
               ignoreDuringBuilds: true
-            }
+            },
+            experimental: {
+              webpackBuildWorker: false
+            },
+            swcMinify: false
           }
           module.exports = nextConfig
           EOF
@@ -95,12 +99,11 @@ jobs:
           SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
           SUPABASE_JWT_SECRET: ${{ secrets.SUPABASE_JWT_SECRET }}
           NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-          NODE_ENV: production
         run: |
           npm ci
           npx prisma generate
           npx prisma db seed
-          npm run build
+          NODE_OPTIONS=--max-old-space-size=512 npm run build
 
       # ✅ Update package.json for cPanel
       - name: Update Package.json for cPanel
