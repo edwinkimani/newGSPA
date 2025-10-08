@@ -162,13 +162,13 @@ jobs:
                 port: ${{ secrets.SSH_PORT || 22 }}
                 script: |
                     set -e  # Exit on any error
-                    
+
                     # Login to Docker Hub securely
                     echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
-                    
+
                     # Navigate to app directory
                     cd /home/${{ secrets.SSH_USER }}/app
-                    
+
                     # Create environment file
                     cat > .env << 'ENDFILE'
                     DATABASE_URL=mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@localhost:3306/${{ secrets.MYSQL_DATABASE }}
@@ -186,16 +186,29 @@ jobs:
                     SEED_ADMIN_EMAIL=admin@gspa.com
                     SEED_ADMIN_PASSWORD=Admin@123!
                     ENDFILE
-                    
-                    # Ensure MySQL service is running
-                    echo "Starting MySQL service..."
-                    sudo systemctl start mysql || echo "MySQL might already be running"
-                    sudo systemctl enable mysql || echo "MySQL enable might have failed"
-                    
+
+                    # Stop and remove existing MySQL container if it exists
+                    echo "Stopping existing MySQL container..."
+                    docker stop mysql-gspa || echo "No MySQL container to stop"
+                    docker rm mysql-gspa || echo "No MySQL container to remove"
+
+                    # Start MySQL in Docker
+                    echo "Starting MySQL Docker container..."
+                    docker run -d \
+                        --name mysql-gspa \
+                        -e MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }} \
+                        -e MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }} \
+                        -e MYSQL_USER=${{ secrets.MYSQL_USER }} \
+                        -e MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }} \
+                        -p 3306:3306 \
+                        -v mysql_gspa_data:/var/lib/mysql \
+                        --restart unless-stopped \
+                        mysql:8.0
+
                     # Wait for MySQL to be ready
                     echo "Waiting for MySQL to be ready..."
                     for i in {1..30}; do
-                        if sudo mysql -h localhost -u root -e "SELECT 1;" > /dev/null 2>&1; then
+                        if mysql -h localhost -u root -p${{ secrets.MYSQL_ROOT_PASSWORD }} -e "SELECT 1;" > /dev/null 2>&1; then
                         echo "✅ MySQL is ready!"
                         break
                         else
@@ -207,18 +220,8 @@ jobs:
                         exit 1
                         fi
                     done
-                    
-                    # Create production database and user if they don't exist
-                    echo "Setting up production database..."
-                    sudo mysql -h localhost -u root << EOF
-                    CREATE DATABASE IF NOT EXISTS ${{ secrets.MYSQL_DATABASE }};
-                    CREATE USER IF NOT EXISTS '${{ secrets.MYSQL_USER }}'@'localhost' IDENTIFIED BY '${{ secrets.MYSQL_PASSWORD }}';
-                    CREATE USER IF NOT EXISTS '${{ secrets.MYSQL_USER }}'@'%' IDENTIFIED BY '${{ secrets.MYSQL_PASSWORD }}';
-                    GRANT ALL PRIVILEGES ON ${{ secrets.MYSQL_DATABASE }}.* TO '${{ secrets.MYSQL_USER }}'@'localhost';
-                    GRANT ALL PRIVILEGES ON ${{ secrets.MYSQL_DATABASE }}.* TO '${{ secrets.MYSQL_USER }}'@'%';
-                    FLUSH PRIVILEGES;
-                    EOF
-                    echo "✅ Production database setup complete"
+
+                    echo "✅ MySQL Docker container setup complete"
                     
                     # Stop and remove existing container if it exists
                     echo "Stopping existing container..."
@@ -322,7 +325,7 @@ jobs:
                     
                     # Verify database was created and has tables
                     echo "Verifying database setup..."
-                    sudo mysql -h localhost -u root -e "USE ${{ secrets.MYSQL_DATABASE }}; SHOW TABLES;" || echo "Could not verify database tables"
+                    mysql -h localhost -u root -p${{ secrets.MYSQL_ROOT_PASSWORD }} -e "USE ${{ secrets.MYSQL_DATABASE }}; SHOW TABLES;" || echo "Could not verify database tables"
                     
                     # Final health check
                     echo "Performing final health check..."
