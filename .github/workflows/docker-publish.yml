@@ -74,29 +74,27 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Verify and create prisma directory if missing
+      - name: Verify prisma directory
         run: |
           echo "🔍 Checking project structure..."
           ls -la
           if [ ! -d "prisma" ]; then
             echo "❌ prisma directory not found - creating it"
             mkdir -p prisma
-            # Create basic schema
-            cat > prisma/schema.prisma << 'EOF'
-            generator client {
-              provider = "prisma-client-js"
-            }
-
-            datasource db {
-              provider = "mysql"
-              url      = env("DATABASE_URL")
-            }
-
-            model Example {
-              id   Int    @id @default(autoincrement())
-              name String
-            }
-            EOF
+            # Create basic schema using echo commands instead of heredoc
+            echo 'generator client {' > prisma/schema.prisma
+            echo '  provider = "prisma-client-js"' >> prisma/schema.prisma
+            echo '}' >> prisma/schema.prisma
+            echo '' >> prisma/schema.prisma
+            echo 'datasource db {' >> prisma/schema.prisma
+            echo '  provider = "mysql"' >> prisma/schema.prisma
+            echo '  url      = env("DATABASE_URL")' >> prisma/schema.prisma
+            echo '}' >> prisma/schema.prisma
+            echo '' >> prisma/schema.prisma
+            echo 'model Example {' >> prisma/schema.prisma
+            echo '  id   Int    @id @default(autoincrement())' >> prisma/schema.prisma
+            echo '  name String' >> prisma/schema.prisma
+            echo '}' >> prisma/schema.prisma
             echo "✅ Created prisma directory with basic schema"
           else
             echo "✅ prisma directory exists"
@@ -132,8 +130,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          no-cache: true  # Disable cache to ensure fresh build
 
   deploy-to-vps:
     needs: build-and-push
@@ -159,7 +156,7 @@ jobs:
             cd /home/${{ secrets.SSH_USER }}/app
             
             # Create environment file with cPanel MySQL connection
-            cat > .env << EOF
+            cat > .env << 'ENDFILE'
             DATABASE_URL=mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@localhost:3306/${{ secrets.MYSQL_DATABASE }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
@@ -176,7 +173,7 @@ jobs:
             MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
             MYSQL_USER=${{ secrets.MYSQL_USER }}
             MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
-            EOF
+            ENDFILE
             
             # Stop and remove existing container
             docker stop gspa-app || true
