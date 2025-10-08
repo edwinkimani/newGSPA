@@ -163,6 +163,12 @@ jobs:
                 script: |
                     set -e  # Exit on any error
 
+                    # Export secrets as environment variables to avoid issues with special characters
+                    export MYSQL_ROOT_PASSWORD='${{ secrets.MYSQL_ROOT_PASSWORD }}'
+                    export MYSQL_DATABASE='${{ secrets.MYSQL_DATABASE }}'
+                    export MYSQL_USER='${{ secrets.MYSQL_USER }}'
+                    export MYSQL_PASSWORD='${{ secrets.MYSQL_PASSWORD }}'
+
                     # Login to Docker Hub securely
                     echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
 
@@ -170,8 +176,8 @@ jobs:
                     cd /home/${{ secrets.SSH_USER }}/app
 
                     # Create environment file
-                    cat > .env << 'ENDFILE'
-                    DATABASE_URL=mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@localhost:3306/${{ secrets.MYSQL_DATABASE }}
+                    cat > .env << ENDFILE
+                    DATABASE_URL=mysql://$MYSQL_USER:$MYSQL_PASSWORD@localhost:3306/$MYSQL_DATABASE
                     NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
                     NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
                     JWT_SECRET=${{ secrets.JWT_SECRET }}
@@ -196,10 +202,10 @@ jobs:
                     echo "Starting MySQL Docker container..."
                     docker run -d \
                         --name mysql-gspa \
-                        -e MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }} \
-                        -e MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }} \
-                        -e MYSQL_USER=${{ secrets.MYSQL_USER }} \
-                        -e MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }} \
+                        -e "MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD" \
+                        -e "MYSQL_DATABASE=$MYSQL_DATABASE" \
+                        -e "MYSQL_USER=$MYSQL_USER" \
+                        -e "MYSQL_PASSWORD=$MYSQL_PASSWORD" \
                         -p 3306:3306 \
                         -v mysql_gspa_data:/var/lib/mysql \
                         --restart unless-stopped \
@@ -208,7 +214,7 @@ jobs:
                     # Wait for MySQL to be ready
                     echo "Waiting for MySQL to be ready..."
                     for i in {1..30}; do
-                        if mysql -h localhost -u root -p${{ secrets.MYSQL_ROOT_PASSWORD }} -e "SELECT 1;" > /dev/null 2>&1; then
+                        if mysql -h localhost -u root -p"$MYSQL_ROOT_PASSWORD" -e "SELECT 1;" > /dev/null 2>&1; then
                         echo "✅ MySQL is ready!"
                         break
                         else
@@ -325,7 +331,7 @@ jobs:
                     
                     # Verify database was created and has tables
                     echo "Verifying database setup..."
-                    mysql -h localhost -u root -p${{ secrets.MYSQL_ROOT_PASSWORD }} -e "USE ${{ secrets.MYSQL_DATABASE }}; SHOW TABLES;" || echo "Could not verify database tables"
+                    mysql -h localhost -u root -p"$MYSQL_ROOT_PASSWORD" -e "USE $MYSQL_DATABASE; SHOW TABLES;" || echo "Could not verify database tables"
                     
                     # Final health check
                     echo "Performing final health check..."
