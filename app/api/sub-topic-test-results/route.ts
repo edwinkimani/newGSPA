@@ -3,6 +3,43 @@ import { getServerSession } from 'next-auth'
 import { prisma } from '@/lib/prisma/client'
 import { authOptions } from '@/lib/auth/config'
 
+export const dynamic = 'force-dynamic'
+
+export async function GET(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const url = new URL(request.url)
+    const userId = url.searchParams.get('userId')
+    const levelId = url.searchParams.get('levelId')
+
+    if (!userId || !levelId) {
+      return NextResponse.json({ error: 'userId and levelId are required' }, { status: 400 })
+    }
+
+    // Only allow users to fetch their own results
+    if (userId !== session.user.id) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    }
+
+    const results = await prisma.$queryRaw`
+      SELECT str.*, stt.subTopicId
+      FROM SubTopicTestResult str
+      JOIN SubTopicTest stt ON str.subTopicTestId = stt.id
+      WHERE str.userId = ${userId} AND str.levelId = ${levelId}
+      ORDER BY str.completedAt DESC
+    ` as any[]
+
+    return NextResponse.json(results)
+  } catch (error) {
+    console.error('Error fetching sub-topic test results:', error)
+    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+  }
+}
+
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)

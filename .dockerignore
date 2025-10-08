@@ -1,0 +1,13 @@
+node_modules
+.next
+.git
+.github
+prisma
+dist
+coverage
+.env
+.env.*
+*.log
+*.sqlite
+/.vscode
+/.idea

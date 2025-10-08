@@ -207,6 +207,29 @@ export default function LevelDetailPage() {
         console.error("Error fetching user progress:", error)
         setUserProgress([])
       }
+
+      // Get subtopic test results to mark completed tests
+      console.log("Fetching subtopic test results for user:", userId, "level:", levelId)
+      try {
+        const testResultsRes = await fetch(`/api/sub-topic-test-results?userId=${userId}&levelId=${levelId}`)
+        console.log("Test results response status:", testResultsRes.status)
+        if (testResultsRes.ok) {
+          const testResultsData = await testResultsRes.json()
+          console.log("Test results data:", testResultsData)
+          const completedTests = new Set<string>()
+          testResultsData.forEach((result: any) => {
+            if (result.passed) {
+              completedTests.add(result.subTopicTest.subTopicId)
+            }
+          })
+          setCompletedSubtopicsWithTests(completedTests)
+        } else {
+          const errorText = await testResultsRes.text()
+          console.error("Failed to fetch subtopic test results:", errorText)
+        }
+      } catch (error) {
+        console.error("Error fetching subtopic test results:", error)
+      }
     } catch (error) {
       console.error("Error fetching level data:", error)
       router.push(`/dashboard/my-modules/${moduleId}`)
@@ -390,7 +413,11 @@ export default function LevelDetailPage() {
 
           <div className="mb-4">
             <h1 className="text-xl font-bold mb-2 text-white">{level.title}</h1>
-            {level.description && <p className="text-gray-300 text-sm mb-4">{level.description}</p>}
+            {level.description && (
+              <p className="text-gray-300 text-sm mb-4">
+                {level.description.split(' ').slice(0, 20).join(' ') + (level.description.split(' ').length > 20 ? '...' : '')}
+              </p>
+            )}
 
             <div className="flex flex-col gap-2 text-sm text-gray-300">
               {level.estimatedDuration && (
