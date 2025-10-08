@@ -182,6 +182,7 @@ jobs:
           server-dir: /newGSPA/
           local-dir: ./
           dangerous-clean-slate: true  # Clean the directory first
+          timeout: 120000
           exclude: |
             **/.git*
             **/.github/*
@@ -203,3 +204,4 @@ jobs:
           server-dir: /public_html/
           local-dir: ./public_html_files/  # Only deploy from this specific folder
           dangerous-clean-slate: true  # Clean public_html completely
+          timeout: 120000
