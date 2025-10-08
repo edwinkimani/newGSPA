@@ -205,7 +205,7 @@ jobs:
               --restart unless-stopped \
               ${{ env.IMAGE_NAME }}:latest
             
-            # Wait for app to start
+            # Wait for app to starts
             echo "Waiting for application to start..."
             sleep 30
             
