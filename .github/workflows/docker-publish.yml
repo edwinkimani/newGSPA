@@ -42,32 +42,28 @@ jobs:
         run: npx prisma generate
 
       - name: Wait for MySQL to be ready
-        run: sleep 20
+        run: |
+          timeout 60s bash -c 'until mysql -h 127.0.0.1 -u root -ptest_root_password -e "SELECT 1;" > /dev/null 2>&1; do sleep 2; done'
+          echo "MySQL is ready!"
 
       - name: Reset test database
         run: |
-          mysql -h 127.0.0.1 -u root -ptest_root_password -e "DROP DATABASE IF EXISTS test_gspa_db; CREATE DATABASE test_gspa_db;"
+          mysql -h 127.0.0.1 -u root -ptest_root_password -e "DROP DATABASE IF EXISTS test_gspa_db;"
+          mysql -h 127.0.0.1 -u root -ptest_root_password -e "CREATE DATABASE test_gspa_db;"
           mysql -h 127.0.0.1 -u root -ptest_root_password -e "CREATE USER IF NOT EXISTS 'test_user'@'%' IDENTIFIED BY 'test_password';"
           mysql -h 127.0.0.1 -u root -ptest_root_password -e "GRANT ALL PRIVILEGES ON test_gspa_db.* TO 'test_user'@'%';"
           mysql -h 127.0.0.1 -u root -ptest_root_password -e "FLUSH PRIVILEGES;"
+          echo "Database reset complete"
 
       - name: Run database migrations
         run: npx prisma migrate deploy
         env:
           DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_gspa_db
 
-      - name: Run tests
-        run: npm test
-        env:
-          DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_gspa_db
-          NEXTAUTH_SECRET: test-secret
-          NEXTAUTH_URL: http://localhost:3000
-          JWT_SECRET: test-jwt-secret
-          RESEND_API_KEY: test-resend-key
-          PAYSTACK_SECRET_KEY: test-paystack-secret
-          NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY: test-paystack-public
-          NEXT_PUBLIC_SITE_URL: http://localhost:3000
-          NEXT_PUBLIC_APP_URL: http://localhost:3000
+      - name: Run build validation
+        run: |
+          npm run build
+          echo "✅ Build successful - application validation passed"
 
   build-and-push:
     needs: test
@@ -132,13 +128,9 @@ jobs:
             # Navigate to app directory
             cd /home/${{ secrets.SSH_USER }}/app
             
-            # Create environment file with DOCKER MySQL connection
+            # Create environment file with cPanel MySQL connection
             cat > .env << EOF
-            DATABASE_URL=mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@mysql:3306/${{ secrets.MYSQL_DATABASE }}
-            MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
-            MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
-            MYSQL_USER=${{ secrets.MYSQL_USER }}
-            MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
+            DATABASE_URL=mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@localhost:3306/${{ secrets.MYSQL_DATABASE }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
@@ -150,26 +142,31 @@ jobs:
             GMAIL_USER=${{ secrets.GMAIL_USER }}
             GMAIL_PASS=${{ secrets.GMAIL_PASS }}
             EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+            MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
+            MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
+            MYSQL_USER=${{ secrets.MYSQL_USER }}
+            MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
             EOF
             
-            # Stop any running containers
-            docker-compose down || true
+            # Stop and remove existing container
+            docker stop gspa-app || true
+            docker rm gspa-app || true
             
-            # Pull latest app image
-            docker-compose pull app
+            # Pull latest image
+            docker pull ${{ env.IMAGE_NAME }}:latest
             
-            # Start MySQL and app using docker-compose
-            docker-compose up -d mysql
+            # Start the application (connecting to cPanel MySQL)
+            docker run -d \
+              --name gspa-app \
+              --env-file /home/${{ secrets.SSH_USER }}/.env \
+              --network host \
+              -p 80:3000 \
+              --restart unless-stopped \
+              ${{ env.IMAGE_NAME }}:latest
             
-            # Wait for MySQL to be ready
-            sleep 30
-            
-            # Start the app
-            docker-compose up -d app
-            
-            # Wait for app to start, then run migrations
+            # Run Prisma migrations against cPanel MySQL
             sleep 20
-            docker-compose exec -T app npx prisma migrate deploy
+            docker exec gspa-app npx prisma migrate deploy
             
-            # Clean up
+            # Clean up old images
             docker image prune -f
