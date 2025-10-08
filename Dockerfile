@@ -45,8 +45,8 @@ COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modul
 
 
 # Copy necessary config files
-COPY next.config.js ./
-COPY tsconfig.json ./
+COPY --from=builder --chown=nextjs:nodejs /app/next.config.js ./
+COPY --from=builder --chown=nextjs:nodejs /app/tsconfig.json ./
 
 # Set proper permissions
 RUN chown -R nextjs:nodejs /app && \
