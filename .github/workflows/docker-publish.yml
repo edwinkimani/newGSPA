@@ -139,7 +139,7 @@ jobs:
 
     steps:
       - name: Wait for the image to be available
-        run: sleep 15
+        run: sleep 30
 
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.0
@@ -149,13 +149,13 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
-            # Login to Docker Hub
-            docker login -u '${{ secrets.DOCKER_USERNAME }}' -p '${{ secrets.DOCKER_PASSWORD }}'
+            # Login to Docker Hub securely
+            echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
             
             # Navigate to app directory
             cd /home/${{ secrets.SSH_USER }}/app
             
-            # Create environment file with cPanel MySQL connection
+            # Create environment file using GitHub Secrets for MySQL
             cat > .env << 'ENDFILE'
             DATABASE_URL=mysql://${{ secrets.MYSQL_USER }}:${{ secrets.MYSQL_PASSWORD }}@localhost:3306/${{ secrets.MYSQL_DATABASE }}
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
@@ -169,31 +169,61 @@ jobs:
             GMAIL_USER=${{ secrets.GMAIL_USER }}
             GMAIL_PASS=${{ secrets.GMAIL_PASS }}
             EMAIL_FROM=${{ secrets.EMAIL_FROM }}
-            MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
-            MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
-            MYSQL_USER=${{ secrets.MYSQL_USER }}
-            MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
+            SEED_ADMIN_EMAIL=admin@gspa.com
+            SEED_ADMIN_PASSWORD=Admin@123!
             ENDFILE
             
-            # Stop and remove existing container
+            # Ensure MySQL service is running
+            sudo systemctl start mysql || true
+            sudo systemctl enable mysql || true
+            
+            # Stop and remove existing container if it exists
             docker stop gspa-app || true
             docker rm gspa-app || true
             
-            # Pull latest image
-            docker pull ${{ env.IMAGE_NAME }}:latest
+            # Wait for Docker Hub image propagation
+            echo "Waiting for Docker Hub image propagation..."
+            sleep 30
             
-            # Start the application (connecting to cPanel MySQL)
+            # Pull latest image with retry logic
+            for i in {1..5}; do
+              if docker pull ${{ env.IMAGE_NAME }}:latest; then
+                echo "✅ Successfully pulled image"
+                break
+              else
+                echo "❌ Attempt $i failed, retrying in 10 seconds..."
+                sleep 10
+              fi
+            done
+            
+            # Start the application (connecting to VPS MySQL)
             docker run -d \
               --name gspa-app \
-              --env-file /home/${{ secrets.SSH_USER }}/.env \
+              --env-file /home/${{ secrets.SSH_USER }}/app/.env \
               --network host \
               -p 80:3000 \
               --restart unless-stopped \
               ${{ env.IMAGE_NAME }}:latest
             
-            # Run Prisma migrations against cPanel MySQL
-            sleep 20
+            # Wait for app to start
+            echo "Waiting for application to start..."
+            sleep 30
+            
+            # Run Prisma migrations
+            echo "Running database migrations..."
             docker exec gspa-app npx prisma migrate deploy
+            
+            # Run Prisma seeding with proper environment
+            echo "Running database seeding..."
+            docker exec gspa-app npm run db:seed
+            
+            # Check if container is running
+            echo "Checking container status..."
+            docker ps | grep gspa-app && echo "✅ Container is running!" || echo "❌ Container not running"
+            
+            # Check application health
+            echo "Checking application health..."
+            curl -f http://localhost:3000/api/health || echo "Health check failed"
             
             # Clean up old images
             docker image prune -f
