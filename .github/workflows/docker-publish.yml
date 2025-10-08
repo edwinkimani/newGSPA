@@ -41,6 +41,16 @@ jobs:
       - name: Generate Prisma client
         run: npx prisma generate
 
+      - name: Wait for MySQL to be ready
+        run: sleep 20
+
+      - name: Reset test database
+        run: |
+          mysql -h 127.0.0.1 -u root -ptest_root_password -e "DROP DATABASE IF EXISTS test_gspa_db; CREATE DATABASE test_gspa_db;"
+          mysql -h 127.0.0.1 -u root -ptest_root_password -e "CREATE USER IF NOT EXISTS 'test_user'@'%' IDENTIFIED BY 'test_password';"
+          mysql -h 127.0.0.1 -u root -ptest_root_password -e "GRANT ALL PRIVILEGES ON test_gspa_db.* TO 'test_user'@'%';"
+          mysql -h 127.0.0.1 -u root -ptest_root_password -e "FLUSH PRIVILEGES;"
+
       - name: Run database migrations
         run: npx prisma migrate deploy
         env:
