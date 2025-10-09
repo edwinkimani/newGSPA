@@ -189,15 +189,23 @@ jobs:
                 SEED_ADMIN_PASSWORD=Admin@123!
                 ENDFILE
 
-                # Verify MySQL connection to existing database
-                echo "Verifying connection to existing MySQL database..."
-                if mysql -h localhost -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
-                  echo "✅ Successfully connected to existing MySQL database"
+                echo "Verifying MySQL connection using socket..."
+                if mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
+                  echo "✅ Successfully connected to MySQL database via socket"
                 else
-                  echo "❌ Failed to connect to existing MySQL database"
-                  echo "Please ensure MySQL is running on the VPS and credentials are correct"
-                  exit 1
-                fi
+                    echo "❌ Failed to connect via socket, trying localhost..."
+                    # Fallback to TCP connection
+                    if mysql -h 127.0.0.1 -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
+                      echo "✅ Successfully connected via TCP (127.0.0.1)"
+                    else
+                      echo "❌ All connection attempts failed"
+                      echo "Debug information:"
+                      sudo systemctl status mysql | head -5
+                      echo "Testing basic connection:"
+                      mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "SELECT 1;" 2>/dev/null && echo "✅ Basic connection works" || echo "❌ Basic connection failed"
+                      exit 1
+                    fi
+                 fi
                 
                 # ===== APPLICATION DEPLOYMENT =====
                 # Stop and remove existing app container
