@@ -188,7 +188,7 @@ jobs:
 
             # Create environment file with proper DATABASE_URL format
             cat > .env << ENDFILE
-            DATABASE_URL="mysql://$MYSQL_USER:$MYSQL_PASSWORD@host.docker.internal:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10"
+            DATABASE_URL=mysql://gspa_db_deployer:%21Deployer1%40%23%24%25%5E%26%2A%28%29@host.docker.internal:3306/your_database_name?connection_limit=5&socket_timeout=10
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
