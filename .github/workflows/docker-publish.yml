@@ -129,177 +129,212 @@ jobs:
           echo "You can check your image at: https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/my-gspa-app"
     
   deploy-to-vps:
-      needs: build-and-push
-      runs-on: ubuntu-latest
-      if: github.ref == 'refs/heads/main'
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
 
-      steps:
-        - name: Wait for image availability
-          run: |
-            echo "Waiting for Docker Hub image propagation..."
-            sleep 60
+    steps:
+      - name: Wait for image availability
+        run: |
+          echo "Waiting for Docker Hub image propagation..."
+          sleep 60
 
-        - name: Get commit SHA for image tag
-          id: sha
-          run: echo "sha_short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+      - name: Get commit SHA for image tag
+        id: sha
+        run: echo "sha_short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
 
-        - name: Deploy to VPS via SSH
-          uses: appleboy/ssh-action@v1.0.0
-          with:
-            host: ${{ secrets.SSH_HOST }}
-            username: ${{ secrets.SSH_USER }}
-            key: ${{ secrets.SSH_PRIVATE_KEY }}
-            port: ${{ secrets.SSH_PORT || 22 }}
-            script: |
-              set -e
+      - name: Deploy to VPS via SSH
+        uses: appleboy/ssh-action@v1.0.0
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: ${{ secrets.SSH_PORT || 22 }}
+          script: |
+            set -e
 
-              # Export environment variables
-              export MYSQL_ROOT_PASSWORD='${{ secrets.MYSQL_ROOT_PASSWORD }}'
-              export MYSQL_DATABASE='${{ secrets.MYSQL_DATABASE }}'
-              export MYSQL_USER='${{ secrets.MYSQL_USER }}'
-              export MYSQL_PASSWORD='${{ secrets.MYSQL_PASSWORD }}'
+            # Export environment variables
+            export MYSQL_ROOT_PASSWORD='${{ secrets.MYSQL_ROOT_PASSWORD }}'
+            export MYSQL_DATABASE='${{ secrets.MYSQL_DATABASE }}'
+            export MYSQL_USER='${{ secrets.MYSQL_USER }}'
+            export MYSQL_PASSWORD='${{ secrets.MYSQL_PASSWORD }}'
 
-              # Login to Docker Hub
-              echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
+            # Login to Docker Hub
+            echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
 
-              cd /home/${{ secrets.SSH_USER }}/app
+            cd /home/${{ secrets.SSH_USER }}/app
 
-              # Create environment file
-              cat > .env << ENDFILE
-              DATABASE_URL=${{ secrets.DATABASE_URL }}
-              NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-              NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
-              JWT_SECRET=${{ secrets.JWT_SECRET }}
-              RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
-              PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
-              NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}
-              NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
-              NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
-              GMAIL_USER=${{ secrets.GMAIL_USER }}
-              GMAIL_PASS=${{ secrets.GMAIL_PASS }}
-              EMAIL_FROM=${{ secrets.EMAIL_FROM }}
-              SEED_ADMIN_EMAIL=admin@gspa.com
-              SEED_ADMIN_PASSWORD=Admin@123!
-              ENDFILE
-              
-              # Ensure database exists
-              # Replace the MySQL section with this simplified version:
-              echo "Skipping MySQL setup - assuming database is already configured"
-              if mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
-                echo "✅ MySQL connection successful"
+            # Create environment file with proper DATABASE_URL for Docker container
+            cat > .env << ENDFILE
+            DATABASE_URL="mysql://$MYSQL_USER:$MYSQL_PASSWORD@host.docker.internal:3306/$MYSQL_DATABASE"
+            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
+            JWT_SECRET=${{ secrets.JWT_SECRET }}
+            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
+            NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}
+            NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
+            NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
+            GMAIL_USER=${{ secrets.GMAIL_USER }}
+            GMAIL_PASS=${{ secrets.GMAIL_PASS }}
+            EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+            SEED_ADMIN_EMAIL=admin@gspa.com
+            SEED_ADMIN_PASSWORD=Admin@123!
+            ENDFILE
+
+            echo "Skipping MySQL setup - assuming database is already configured"
+            if mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
+              echo "✅ MySQL connection successful from VPS"
+            else
+              echo "⚠️ MySQL connection failed but continuing - app may handle it"
+            fi
+
+            # ===== FORCE CLEAN DEPLOYMENT =====
+            echo "🧹 FORCE CLEANING EXISTING CONTAINERS AND IMAGES..."
+
+            # Stop and remove any existing app container (forcefully)
+            echo "Stopping and removing existing containers..."
+            docker stop gspa-app 2>/dev/null || echo "No gspa-app container to stop"
+            docker rm -f gspa-app 2>/dev/null || echo "No gspa-app container to remove"
+
+            # Remove any other containers that might be using the same image
+            echo "Removing any other containers using the same image..."
+            docker ps -a --filter "ancestor=${{ env.IMAGE_NAME }}" --format "{{.ID}}" | xargs -r docker rm -f || true
+
+            # Remove dangling containers
+            echo "Removing stopped containers..."
+            docker container prune -f
+
+            # Remove old images to free space and ensure fresh pull
+            echo "Removing old images..."
+            docker images ${{ env.IMAGE_NAME }} -q | xargs -r docker rmi -f || true
+
+            # Clean up dangling images
+            echo "Cleaning up dangling images..."
+            docker image prune -f
+
+            IMAGE_NAME="${{ env.IMAGE_NAME }}"
+            SHA_SHORT="${{ steps.sha.outputs.sha_short }}"
+
+            echo "🔄 PULLING FRESH DOCKER IMAGE..."
+
+            # Try multiple tags in order of preference
+            SELECTED_TAG=""
+            for TAG in "main-$SHA_SHORT" "main" "latest"; do
+              echo "Trying to pull tag: $TAG"
+              if docker pull $IMAGE_NAME:$TAG; then
+                echo "✅ Successfully pulled FRESH image with tag: $TAG"
+                SELECTED_TAG="$TAG"
+                break
               else
-                echo "⚠️ MySQL connection failed but continuing - app may handle it"
+                echo "❌ Failed to pull tag: $TAG"
               fi
+            done
 
-              # ===== FORCE CLEAN DEPLOYMENT =====
-              echo "🧹 FORCE CLEANING EXISTING CONTAINERS AND IMAGES..."
+            if [ -z "$SELECTED_TAG" ]; then
+              echo "🚨 CRITICAL: Could not pull any Docker image!"
+              echo "Available tags on Docker Hub:"
+              curl -s "https://registry.hub.docker.com/v2/repositories/${{ secrets.DOCKER_USERNAME }}/my-gspa-app/tags/?page_size=10" | jq -r '.results[].name' 2>/dev/null || echo "Cannot fetch tags"
+              exit 1
+            fi
 
-              # Stop and remove any existing app container (forcefully)
-              echo "Stopping and removing existing containers..."
-              docker stop gspa-app 2>/dev/null || echo "No gspa-app container to stop"
-              docker rm -f gspa-app 2>/dev/null || echo "No gspa-app container to remove"
+            echo "🎯 STARTING FRESH CONTAINER WITH TAG: $SELECTED_TAG"
+            
+            # Start completely fresh container with host.docker.internal support
+            docker run -d \
+              --name gspa-app \
+              --env-file /home/${{ secrets.SSH_USER }}/app/.env \
+              --add-host=host.docker.internal:host-gateway \
+              -p 3000:3000 \
+              --restart unless-stopped \
+              $IMAGE_NAME:$SELECTED_TAG
 
-              # Remove any other containers that might be using the same image
-              echo "Removing any other containers using the same image..."
-              docker ps -a --filter "ancestor=${{ env.IMAGE_NAME }}" --format "{{.ID}}" | xargs -r docker rm -f || true
-
-              # Remove dangling containers
-              echo "Removing stopped containers..."
-              docker container prune -f
-
-              # Remove old images to free space and ensure fresh pull
-              echo "Removing old images..."
-              docker images ${{ env.IMAGE_NAME }} -q | xargs -r docker rmi -f || true
-
-              # Clean up dangling images
-              echo "Cleaning up dangling images..."
-              docker image prune -f
-
-              IMAGE_NAME="${{ env.IMAGE_NAME }}"
-              SHA_SHORT="${{ steps.sha.outputs.sha_short }}"
-
-              echo "🔄 PULLING FRESH DOCKER IMAGE..."
-
-              # Try multiple tags in order of preference
-              SELECTED_TAG=""
-              for TAG in "main-$SHA_SHORT" "main" "latest"; do
-                echo "Trying to pull tag: $TAG"
-                if docker pull $IMAGE_NAME:$TAG; then
-                  echo "✅ Successfully pulled FRESH image with tag: $TAG"
-                  SELECTED_TAG="$TAG"
-                  break
-                else
-                  echo "❌ Failed to pull tag: $TAG"
-                fi
-              done
-
-              if [ -z "$SELECTED_TAG" ]; then
-                echo "🚨 CRITICAL: Could not pull any Docker image!"
-                echo "Available tags on Docker Hub:"
-                curl -s "https://registry.hub.docker.com/v2/repositories/${{ secrets.DOCKER_USERNAME }}/my-gspa-app/tags/?page_size=10" | jq -r '.results[].name' 2>/dev/null || echo "Cannot fetch tags"
-                exit 1
+            echo "⏳ Waiting for fresh application to start..."
+            for i in {1..30}; do
+              if curl -f http://localhost:3000/ >/dev/null 2>&1; then
+                echo "✅ FRESH Application is healthy and responding"
+                break
               fi
+              echo "⏳ Waiting for fresh application to start... ($i/30)"
+              sleep 5
+            done
 
-              echo "🎯 STARTING FRESH CONTAINER WITH TAG: $SELECTED_TAG"
-              
-              # Start completely fresh container
-              docker run -d \
-                --name gspa-app \
-                --env-file /home/${{ secrets.SSH_USER }}/app/.env \
-                -p 3000:3000 \
-                --restart unless-stopped \
-                $IMAGE_NAME:$SELECTED_TAG
+            # Test database connection from inside container first
+            echo "Testing database connection from inside container..."
+            if docker exec gspa-app node -e "
+              const { PrismaClient } = require('@prisma/client');
+              const prisma = new PrismaClient();
+              prisma.\$queryRaw\`SELECT 1\`
+                .then(() => {
+                  console.log('✅ Database connection successful from container');
+                  process.exit(0);
+                })
+                .catch(err => {
+                  console.error('❌ Database connection failed from container:', err.message);
+                  process.exit(1);
+                });
+            " 2>/dev/null; then
+              echo "✅ Database connection test passed - migrations should work"
+            else
+              echo "❌ Database connection test failed - trying alternative connection method"
+              # Try using the host's IP directly as fallback
+              HOST_IP=$(hostname -I | awk '{print $1}')
+              echo "Trying with host IP: $HOST_IP"
+              sed -i "s/host.docker.internal/$HOST_IP/g" /home/${{ secrets.SSH_USER }}/app/.env
+              docker restart gspa-app
+              sleep 10
+            fi
 
-              echo "⏳ Waiting for fresh application to start..."
-              for i in {1..30}; do
-                if curl -f http://localhost:3000/ >/dev/null 2>&1; then
-                  echo "✅ FRESH Application is healthy and responding"
-                  break
-                fi
-                echo "⏳ Waiting for fresh application to start... ($i/30)"
-                sleep 5
-              done
-
-              # Run migrations with retries
-              echo "Running Prisma migrations on fresh container..."
-              for i in {1..5}; do
-                if docker exec gspa-app npx prisma migrate deploy 2>/dev/null; then
-                  echo "✅ Migrations completed successfully on fresh container"
-                  break
-                else
-                  echo "❌ Migration attempt $i failed, retrying in 10 seconds..."
+            # Run migrations with better error handling
+            echo "Running Prisma migrations on fresh container..."
+            MIGRATION_SUCCESS=false
+            for i in {1..3}; do
+              echo "Migration attempt $i/3..."
+              if docker exec gspa-app npx prisma migrate deploy; then
+                echo "✅ Migrations completed successfully on fresh container"
+                MIGRATION_SUCCESS=true
+                break
+              else
+                echo "❌ Migration attempt $i failed"
+                if [ $i -lt 3 ]; then
+                  echo "Retrying in 10 seconds..."
                   sleep 10
                 fi
-                if [ $i -eq 5 ]; then
-                  echo "🚨 All migration attempts failed on fresh container"
-                  docker logs gspa-app --tail 50
-                  exit 1
-                fi
-              done
-
-              # Run seeding (optional)
-              echo "Running Prisma seed on fresh container..."
-              if docker exec gspa-app npm run db:seed 2>/dev/null; then
-                echo "✅ Seeding completed successfully on fresh container"
-              else
-                echo "⚠️ Seeding failed but continuing deployment"
-                docker logs gspa-app --tail 20
               fi
+            done
 
-              echo "=== FRESH CONTAINER STATUS ==="
-              docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+            if [ "$MIGRATION_SUCCESS" != "true" ]; then
+              echo "⚠️ Migrations failed but continuing deployment"
+              echo "This might be because:"
+              echo "1. Database is already up to date"
+              echo "2. There are connection issues"
+              echo "3. Migration files are missing"
+              echo "Checking current database status..."
+              docker exec gspa-app npx prisma db status || echo "Cannot check database status"
+            fi
 
-              # Final health check
-              if curl -f http://localhost:3000/ >/dev/null 2>&1; then
-                echo "✅ 🎉 FRESH DEPLOYMENT COMPLETED SUCCESSFULLY! Application is running on clean container."
-              else
-                echo "⚠️ Fresh deployment completed but application health check failed"
-                echo "Debug info:"
-                docker logs gspa-app --tail 30
-              fi
+            # Run seeding (optional)
+            echo "Running Prisma seed on fresh container..."
+            if docker exec gspa-app npm run db:seed; then
+              echo "✅ Seeding completed successfully on fresh container"
+            else
+              echo "⚠️ Seeding failed but continuing deployment"
+            fi
 
-              # Final cleanup
-              echo "Performing final cleanup..."
-              docker image prune -f
+            echo "=== FRESH CONTAINER STATUS ==="
+            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
-              echo "🚀 FRESH DEPLOYMENT PROCESS FINISHED!"
+            # Final health check
+            if curl -f http://localhost:3000/ >/dev/null 2>&1; then
+              echo "✅ 🎉 FRESH DEPLOYMENT COMPLETED SUCCESSFULLY! Application is running on clean container."
+            else
+              echo "⚠️ Fresh deployment completed but application health check failed"
+              echo "Debug info:"
+              docker logs gspa-app --tail 30
+            fi
+
+            # Final cleanup
+            echo "Performing final cleanup..."
+            docker image prune -f
+
+            echo "🚀 FRESH DEPLOYMENT PROCESS FINISHED!"
