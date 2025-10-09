@@ -184,11 +184,11 @@ jobs:
               
                             # Ensure database exists
                             echo "Ensuring database exists..."
-                            mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE; GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD'; FLUSH PRIVILEGES;" 2>/dev/null || echo "Could not create/setup database with root credentials"
+                            mysql -h 127.0.0.1 -u root -p"$MYSQL_ROOT_PASSWORD" -e "CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE; GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'localhost' IDENTIFIED BY '$MYSQL_PASSWORD'; FLUSH PRIVILEGES;" 2>/dev/null || echo "Could not create/setup database with root credentials"
               
-                            # Verify MySQL connection using socket
-              echo "Verifying MySQL connection..."
-              if mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
+                            # Verify MySQL connection
+                            echo "Verifying MySQL connection..."
+                            if mysql -h 127.0.0.1 -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
                 echo "✅ MySQL connection successful"
               else
                 echo "❌ MySQL connection failed - please check MySQL service and credentials"
