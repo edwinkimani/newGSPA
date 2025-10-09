@@ -78,28 +78,15 @@ jobs:
         run: |
           echo "🔍 Checking project structure..."
           ls -la
-          if [ ! -d "prisma" ]; then
-            echo "❌ prisma directory not found - creating it"
-            mkdir -p prisma
-            # Create basic schema using echo commands
-            echo 'generator client {' > prisma/schema.prisma
-            echo '  provider = "prisma-client-js"' >> prisma/schema.prisma
-            echo '}' >> prisma/schema.prisma
-            echo '' >> prisma/schema.prisma
-            echo 'datasource db {' >> prisma/schema.prisma
-            echo '  provider = "mysql"' >> prisma/schema.prisma
-            echo '  url      = env("DATABASE_URL")' >> prisma/schema.prisma
-            echo '}' >> prisma/schema.prisma
-            echo '' >> prisma/schema.prisma
-            echo 'model Example {' >> prisma/schema.prisma
-            echo '  id   Int    @id @default(autoincrement())' >> prisma/schema.prisma
-            echo '  name String' >> prisma/schema.prisma
-            echo '}' >> prisma/schema.prisma
-            echo "✅ Created prisma directory with basic schema"
-          else
-            echo "✅ prisma directory exists"
-            ls -la prisma/
+          if [ ! -f "package.json" ]; then
+            echo "❌ package.json not found - this is required"
+            exit 1
           fi
+          if [ ! -f "Dockerfile" ]; then
+            echo "❌ Dockerfile not found - this is required"
+            exit 1
+          fi
+          echo "✅ Project structure looks good"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -110,17 +97,16 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Extract metadata (tags)
+      - name: Extract metadata for tags
         id: meta
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.IMAGE_NAME }}
           tags: |
+            type=raw,value=latest
+            type=raw,value=main
             type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
+            type=sha,prefix=,suffix=,format=short
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -128,114 +114,193 @@ jobs:
           context: .
           file: ./Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.tags }},${{ env.IMAGE_NAME }}:latest
+          tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          # Add build args if needed for build stage
+          build-args: |
+            NODE_ENV=production
+
+      - name: Verify pushed images
+        run: |
+          echo "✅ Build and push completed successfully"
+          echo "Tags pushed: ${{ steps.meta.outputs.tags }}"
+          echo "You can check your image at: https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/my-gspa-app"
     
   deploy-to-vps:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
+      needs: build-and-push
+      runs-on: ubuntu-latest
+      if: github.ref == 'refs/heads/main'
 
-    steps:
-      - name: Wait for image availability
-        run: sleep 45
+      steps:
+        - name: Wait for image availability
+          run: |
+            echo "Waiting for Docker Hub image propagation..."
+            sleep 60
 
-      - name: Get commit SHA for image tag
-        id: sha
-        run: echo "sha_short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+        - name: Get commit SHA for image tag
+          id: sha
+          run: echo "sha_short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
 
-      - name: Deploy to VPS via SSH
-        uses: appleboy/ssh-action@v1.0.0
-        with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script: |
-            set -e
+        - name: Deploy to VPS via SSH
+          uses: appleboy/ssh-action@v1.0.0
+          with:
+            host: ${{ secrets.SSH_HOST }}
+            username: ${{ secrets.SSH_USER }}
+            key: ${{ secrets.SSH_PRIVATE_KEY }}
+            port: ${{ secrets.SSH_PORT || 22 }}
+            script: |
+              set -e
 
-            # Export environment variables
-            export MYSQL_ROOT_PASSWORD='${{ secrets.MYSQL_ROOT_PASSWORD }}'
-            export MYSQL_DATABASE='${{ secrets.MYSQL_DATABASE }}'
-            export MYSQL_USER='${{ secrets.MYSQL_USER }}'
-            export MYSQL_PASSWORD='${{ secrets.MYSQL_PASSWORD }}'
+              # Export environment variables
+              export MYSQL_ROOT_PASSWORD='${{ secrets.MYSQL_ROOT_PASSWORD }}'
+              export MYSQL_DATABASE='${{ secrets.MYSQL_DATABASE }}'
+              export MYSQL_USER='${{ secrets.MYSQL_USER }}'
+              export MYSQL_PASSWORD='${{ secrets.MYSQL_PASSWORD }}'
 
-            echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
+              # Login to Docker Hub
+              echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
 
-            cd /home/${{ secrets.SSH_USER }}/app
+              cd /home/${{ secrets.SSH_USER }}/app
 
-            # Create environment file
-            cat > .env << ENDFILE
-            DATABASE_URL=mysql://$MYSQL_USER:$MYSQL_PASSWORD@localhost:3306/$MYSQL_DATABASE
-            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
-            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
-            NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}
-            NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
-            NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
-            GMAIL_USER=${{ secrets.GMAIL_USER }}
-            GMAIL_PASS=${{ secrets.GMAIL_PASS }}
-            EMAIL_FROM=${{ secrets.EMAIL_FROM }}
-            SEED_ADMIN_EMAIL=admin@gspa.com
-            SEED_ADMIN_PASSWORD=Admin@123!
-            ENDFILE
+              # Create environment file
+              cat > .env << ENDFILE
+              DATABASE_URL=mysql://$MYSQL_USER:$MYSQL_PASSWORD@localhost:3306/$MYSQL_DATABASE
+              NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+              NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
+              JWT_SECRET=${{ secrets.JWT_SECRET }}
+              RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
+              PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
+              NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}
+              NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
+              NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
+              GMAIL_USER=${{ secrets.GMAIL_USER }}
+              GMAIL_PASS=${{ secrets.GMAIL_PASS }}
+              EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+              SEED_ADMIN_EMAIL=admin@gspa.com
+              SEED_ADMIN_PASSWORD=Admin@123!
+              ENDFILE
 
-            # ===== APPLICATION DEPLOYMENT =====
-            echo "Stopping any existing container..."
-            docker stop gspa-app 2>/dev/null || true
-            docker rm gspa-app 2>/dev/null || true
-
-            IMAGE_NAME="${{ env.IMAGE_NAME }}"
-            SHA_SHORT="${{ steps.sha.outputs.sha_short }}"
-            SELECTED_TAG="main-$SHA_SHORT"
-
-            echo "Pulling image..."
-            if docker pull $IMAGE_NAME:$SELECTED_TAG 2>/dev/null; then
-              TAG_TO_USE=$SELECTED_TAG
-              echo "Using tagged image: $TAG_TO_USE"
-            else
-              echo "Tagged image not found, pulling latest..."
-              docker pull $IMAGE_NAME:latest
-              TAG_TO_USE=latest
-            fi
-
-            echo "Starting new container..."
-            docker run -d \
-              --name gspa-app \
-              --env-file /home/${{ secrets.SSH_USER }}/app/.env \
-              -p 3000:3000 \
-              --restart unless-stopped \
-              $IMAGE_NAME:$TAG_TO_USE
-
-            echo "Waiting for app to start..."
-            for i in {1..30}; do
-              if curl -f http://localhost:3000/ >/dev/null 2>&1; then
-                echo "✅ Application is healthy"
-                break
+              # Verify MySQL connection using socket
+              echo "Verifying MySQL connection..."
+              if mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
+                echo "✅ MySQL connection successful"
+              else
+                echo "❌ MySQL connection failed - please check MySQL service and credentials"
+                sudo systemctl status mysql | head -5
+                exit 1
               fi
-              echo "⏳ Waiting... ($i/30)"
-              sleep 5
-            done
 
-            echo "Running Prisma migrations..."
-            docker exec gspa-app npx prisma migrate deploy || echo "⚠️ Migration failed"
+              # ===== FORCE CLEAN DEPLOYMENT =====
+              echo "🧹 FORCE CLEANING EXISTING CONTAINERS AND IMAGES..."
 
-            echo "Running Prisma seed..."
-            docker exec gspa-app npm run db:seed || echo "⚠️ Seeding failed"
+              # Stop and remove any existing app container (forcefully)
+              echo "Stopping and removing existing containers..."
+              docker stop gspa-app 2>/dev/null || echo "No gspa-app container to stop"
+              docker rm -f gspa-app 2>/dev/null || echo "No gspa-app container to remove"
 
-            echo "=== Container Status ==="
-            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+              # Remove any other containers that might be using the same image
+              echo "Removing any other containers using the same image..."
+              docker ps -a --filter "ancestor=${{ env.IMAGE_NAME }}" --format "{{.ID}}" | xargs -r docker rm -f || true
 
-            if curl -f http://localhost:3000/ >/dev/null 2>&1; then
-              echo "✅ 🎉 Deployment successful!"
-            else
-              echo "⚠️ Deployment completed, but app not responding"
-              docker logs gspa-app --tail 20
-            fi
+              # Remove dangling containers
+              echo "Removing stopped containers..."
+              docker container prune -f
 
-            docker image prune -f
-            echo "🚀 Deployment finished"
+              # Remove old images to free space and ensure fresh pull
+              echo "Removing old images..."
+              docker images ${{ env.IMAGE_NAME }} -q | xargs -r docker rmi -f || true
+
+              # Clean up dangling images
+              echo "Cleaning up dangling images..."
+              docker image prune -f
+
+              IMAGE_NAME="${{ env.IMAGE_NAME }}"
+              SHA_SHORT="${{ steps.sha.outputs.sha_short }}"
+
+              echo "🔄 PULLING FRESH DOCKER IMAGE..."
+
+              # Try multiple tags in order of preference
+              SELECTED_TAG=""
+              for TAG in "main-$SHA_SHORT" "main" "latest"; do
+                echo "Trying to pull tag: $TAG"
+                if docker pull $IMAGE_NAME:$TAG; then
+                  echo "✅ Successfully pulled FRESH image with tag: $TAG"
+                  SELECTED_TAG="$TAG"
+                  break
+                else
+                  echo "❌ Failed to pull tag: $TAG"
+                fi
+              done
+
+              if [ -z "$SELECTED_TAG" ]; then
+                echo "🚨 CRITICAL: Could not pull any Docker image!"
+                echo "Available tags on Docker Hub:"
+                curl -s "https://registry.hub.docker.com/v2/repositories/${{ secrets.DOCKER_USERNAME }}/my-gspa-app/tags/?page_size=10" | jq -r '.results[].name' 2>/dev/null || echo "Cannot fetch tags"
+                exit 1
+              fi
+
+              echo "🎯 STARTING FRESH CONTAINER WITH TAG: $SELECTED_TAG"
+              
+              # Start completely fresh container
+              docker run -d \
+                --name gspa-app \
+                --env-file /home/${{ secrets.SSH_USER }}/app/.env \
+                -p 3000:3000 \
+                --restart unless-stopped \
+                $IMAGE_NAME:$SELECTED_TAG
+
+              echo "⏳ Waiting for fresh application to start..."
+              for i in {1..30}; do
+                if curl -f http://localhost:3000/ >/dev/null 2>&1; then
+                  echo "✅ FRESH Application is healthy and responding"
+                  break
+                fi
+                echo "⏳ Waiting for fresh application to start... ($i/30)"
+                sleep 5
+              done
+
+              # Run migrations with retries
+              echo "Running Prisma migrations on fresh container..."
+              for i in {1..5}; do
+                if docker exec gspa-app npx prisma migrate deploy 2>/dev/null; then
+                  echo "✅ Migrations completed successfully on fresh container"
+                  break
+                else
+                  echo "❌ Migration attempt $i failed, retrying in 10 seconds..."
+                  sleep 10
+                fi
+                if [ $i -eq 5 ]; then
+                  echo "🚨 All migration attempts failed on fresh container"
+                  docker logs gspa-app --tail 50
+                  exit 1
+                fi
+              done
+
+              # Run seeding (optional)
+              echo "Running Prisma seed on fresh container..."
+              if docker exec gspa-app npm run db:seed 2>/dev/null; then
+                echo "✅ Seeding completed successfully on fresh container"
+              else
+                echo "⚠️ Seeding failed but continuing deployment"
+                docker logs gspa-app --tail 20
+              fi
+
+              echo "=== FRESH CONTAINER STATUS ==="
+              docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+
+              # Final health check
+              if curl -f http://localhost:3000/ >/dev/null 2>&1; then
+                echo "✅ 🎉 FRESH DEPLOYMENT COMPLETED SUCCESSFULLY! Application is running on clean container."
+              else
+                echo "⚠️ Fresh deployment completed but application health check failed"
+                echo "Debug info:"
+                docker logs gspa-app --tail 30
+              fi
+
+              # Final cleanup
+              echo "Performing final cleanup..."
+              docker image prune -f
+
+              echo "🚀 FRESH DEPLOYMENT PROCESS FINISHED!"
