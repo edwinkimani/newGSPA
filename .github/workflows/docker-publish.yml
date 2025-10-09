@@ -118,7 +118,6 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # Add build args if needed for build stage
           build-args: |
             NODE_ENV=production
 
@@ -152,7 +151,7 @@ jobs:
           port: ${{ secrets.SSH_PORT || 22 }}
           script: |
             set -e
-
+      
             # Export environment variables
             export MYSQL_ROOT_PASSWORD='${{ secrets.MYSQL_ROOT_PASSWORD }}'
             export MYSQL_DATABASE='${{ secrets.MYSQL_DATABASE }}'
@@ -164,9 +163,32 @@ jobs:
 
             cd /home/${{ secrets.SSH_USER }}/app
 
-            # Create environment file with proper DATABASE_URL for Docker container
+            # Configure MySQL user for remote access from any host
+            echo "🔧 Configuring MySQL user for remote access..."
+            mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "
+              -- Create user with access from any host
+              CREATE USER IF NOT EXISTS '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD';
+              
+              -- Grant all privileges
+              GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'%';
+              
+              -- Remove localhost user if exists
+              DROP USER IF EXISTS '$MYSQL_USER'@'localhost';
+              
+              -- Apply changes
+              FLUSH PRIVILEGES;
+              
+              -- Verify user creation
+              SELECT user, host FROM mysql.user WHERE user = '$MYSQL_USER';
+            " 2>/dev/null && echo "✅ MySQL user configured for remote access" || echo "⚠️ MySQL user configuration had issues"
+
+            # Get host IP for database connection fallback
+            HOST_IP=$(hostname -I | awk '{print $1}')
+            echo "📡 Host IP: $HOST_IP"
+
+            # Create environment file with proper DATABASE_URL format
             cat > .env << ENDFILE
-            DATABASE_URL=mysql://$MYSQL_USER:$MYSQL_PASSWORD@host.docker.internal:3306/$MYSQL_DATABASE
+            DATABASE_URL="mysql://$MYSQL_USER:$MYSQL_PASSWORD@host.docker.internal:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10"
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
@@ -182,35 +204,30 @@ jobs:
             SEED_ADMIN_PASSWORD=Admin@123!
             ENDFILE
 
-            echo "Skipping MySQL setup - assuming database is already configured"
-            if mysql -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
+            echo "🔍 Testing MySQL connection from VPS..."
+            if mysql -h localhost -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
               echo "✅ MySQL connection successful from VPS"
             else
-              echo "⚠️ MySQL connection failed but continuing - app may handle it"
+              echo "❌ MySQL connection failed from VPS - testing with root user..."
+              mysql -h localhost -u root -p"$MYSQL_ROOT_PASSWORD" -e "SHOW DATABASES;" 2>/dev/null && echo "✅ Root connection works" || echo "❌ Root connection also failed"
             fi
 
             # ===== FORCE CLEAN DEPLOYMENT =====
             echo "🧹 FORCE CLEANING EXISTING CONTAINERS AND IMAGES..."
 
-            # Stop and remove any existing app container (forcefully)
+            # Stop and remove any existing app container
             echo "Stopping and removing existing containers..."
             docker stop gspa-app 2>/dev/null || echo "No gspa-app container to stop"
             docker rm -f gspa-app 2>/dev/null || echo "No gspa-app container to remove"
 
-            # Remove any other containers that might be using the same image
+            # Remove any other containers using the same image
             echo "Removing any other containers using the same image..."
             docker ps -a --filter "ancestor=${{ env.IMAGE_NAME }}" --format "{{.ID}}" | xargs -r docker rm -f || true
 
-            # Remove dangling containers
-            echo "Removing stopped containers..."
+            # Clean up containers and images
+            echo "Cleaning up containers and images..."
             docker container prune -f
-
-            # Remove old images to free space and ensure fresh pull
-            echo "Removing old images..."
             docker images ${{ env.IMAGE_NAME }} -q | xargs -r docker rmi -f || true
-
-            # Clean up dangling images
-            echo "Cleaning up dangling images..."
             docker image prune -f
 
             IMAGE_NAME="${{ env.IMAGE_NAME }}"
@@ -240,11 +257,12 @@ jobs:
 
             echo "🎯 STARTING FRESH CONTAINER WITH TAG: $SELECTED_TAG"
             
-            # Start completely fresh container with host.docker.internal support
+            # Start fresh container with multiple host options
             docker run -d \
               --name gspa-app \
               --env-file /home/${{ secrets.SSH_USER }}/app/.env \
               --add-host=host.docker.internal:host-gateway \
+              --add-host=database:$HOST_IP \
               -p 3000:3000 \
               --restart unless-stopped \
               $IMAGE_NAME:$SELECTED_TAG
@@ -259,39 +277,64 @@ jobs:
               sleep 5
             done
 
-            # Test database connection from inside container first
-            echo "Testing database connection from inside container..."
+            # Test database connection with multiple approaches
+            echo "🔧 Testing database connection from container..."
+            
+            # Approach 1: Try host.docker.internal
+            echo "Testing connection via host.docker.internal..."
             if docker exec gspa-app node -e "
               const { PrismaClient } = require('@prisma/client');
               const prisma = new PrismaClient();
               prisma.\$queryRaw\`SELECT 1\`
                 .then(() => {
-                  console.log('✅ Database connection successful from container');
+                  console.log('✅ Database connection successful via host.docker.internal');
                   process.exit(0);
                 })
                 .catch(err => {
-                  console.error('❌ Database connection failed from container:', err.message);
+                  console.log('❌ host.docker.internal failed:', err.message);
                   process.exit(1);
                 });
             " 2>/dev/null; then
-              echo "✅ Database connection test passed - migrations should work"
+              echo "✅ Database connection successful via host.docker.internal"
             else
-              echo "❌ Database connection test failed - trying alternative connection method"
-              # Try using the host's IP directly as fallback
-              HOST_IP=$(hostname -I | awk '{print $1}')
-              echo "Trying with host IP: $HOST_IP"
-              sed -i "s/host.docker.internal/$HOST_IP/g" /home/${{ secrets.SSH_USER }}/app/.env
-              docker restart gspa-app
-              sleep 10
+              # Approach 2: Try host IP directly
+              echo "🔄 Trying connection via host IP: $HOST_IP"
+              if docker exec gspa-app node -e "
+                const { PrismaClient } = require('@prisma/client');
+                const prisma = new PrismaClient({
+                  datasources: {
+                    db: {
+                      url: 'mysql://$MYSQL_USER:$MYSQL_PASSWORD@$HOST_IP:3306/$MYSQL_DATABASE?connection_limit=5'
+                    }
+                  }
+                });
+                prisma.\$queryRaw\`SELECT 1\`
+                  .then(() => {
+                    console.log('✅ Database connection successful via host IP');
+                    process.exit(0);
+                  })
+                  .catch(err => {
+                    console.log('❌ Host IP also failed:', err.message);
+                    process.exit(1);
+                  });
+              " 2>/dev/null; then
+                echo "✅ Database connection successful via host IP"
+                # Update .env to use host IP
+                sed -i "s/host.docker.internal/$HOST_IP/g" /home/${{ secrets.SSH_USER }}/app/.env
+                docker restart gspa-app
+                sleep 10
+              else
+                echo "❌ All connection attempts failed"
+              fi
             fi
 
             # Run migrations with better error handling
-            echo "Running Prisma migrations on fresh container..."
+            echo "📦 Running Prisma migrations..."
             MIGRATION_SUCCESS=false
             for i in {1..3}; do
               echo "Migration attempt $i/3..."
               if docker exec gspa-app npx prisma migrate deploy; then
-                echo "✅ Migrations completed successfully on fresh container"
+                echo "✅ Migrations completed successfully"
                 MIGRATION_SUCCESS=true
                 break
               else
@@ -305,36 +348,38 @@ jobs:
 
             if [ "$MIGRATION_SUCCESS" != "true" ]; then
               echo "⚠️ Migrations failed but continuing deployment"
-              echo "This might be because:"
-              echo "1. Database is already up to date"
-              echo "2. There are connection issues"
-              echo "3. Migration files are missing"
               echo "Checking current database status..."
-              docker exec gspa-app npx prisma db status || echo "Cannot check database status"
+              docker exec gspa-app npx prisma db status 2>/dev/null || echo "Cannot check database status"
             fi
 
-            # Run seeding (optional)
-            echo "Running Prisma seed on fresh container..."
-            if docker exec gspa-app npm run db:seed; then
-              echo "✅ Seeding completed successfully on fresh container"
+            # Run seeding with TypeScript support
+            echo "🌱 Running database seeding..."
+            # Try multiple seeding approaches
+            if docker exec gspa-app npx tsx prisma/seeders/seed.ts 2>/dev/null; then
+              echo "✅ Seeding completed successfully with tsx"
+            elif docker exec gspa-app npx prisma db seed 2>/dev/null; then
+              echo "✅ Seeding completed successfully with prisma db seed"
+            elif docker exec gspa-app npm run db:seed 2>/dev/null; then
+              echo "✅ Seeding completed successfully with npm script"
             else
-              echo "⚠️ Seeding failed but continuing deployment"
+              echo "⚠️ Seeding failed - this might be expected if already seeded"
             fi
 
-            echo "=== FRESH CONTAINER STATUS ==="
+            echo "=== CONTAINER STATUS ==="
             docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
 
             # Final health check
             if curl -f http://localhost:3000/ >/dev/null 2>&1; then
-              echo "✅ 🎉 FRESH DEPLOYMENT COMPLETED SUCCESSFULLY! Application is running on clean container."
+              echo "✅ 🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
+              echo "Application is running and accessible"
             else
-              echo "⚠️ Fresh deployment completed but application health check failed"
+              echo "⚠️ Deployment completed but health check failed"
               echo "Debug info:"
-              docker logs gspa-app --tail 30
+              docker logs gspa-app --tail 50
             fi
 
             # Final cleanup
-            echo "Performing final cleanup..."
+            echo "🧹 Performing final cleanup..."
             docker image prune -f
 
-            echo "🚀 FRESH DEPLOYMENT PROCESS FINISHED!"
+            echo "🚀 DEPLOYMENT PROCESS FINISHED!"
