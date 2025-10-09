@@ -382,8 +382,30 @@ export default function ModuleDetailPage() {
     )
   }
 
+  // Helper function to parse completedSubTopics
+  const parseCompletedSubTopics = (rawData: any): string[] => {
+    let completedSubTopics: string[] = []
+    try {
+      if (Array.isArray(rawData)) {
+        completedSubTopics = rawData
+      } else if (rawData && typeof rawData === 'string') {
+        completedSubTopics = JSON.parse(rawData)
+      } else if (rawData && typeof rawData === 'object') {
+        // Handle case where it's already parsed but not an array
+        completedSubTopics = Array.isArray(rawData) ? rawData : (rawData.subtopics || [])
+      }
+    } catch (error) {
+      console.warn('Error parsing completedSubTopics:', error)
+      completedSubTopics = []
+    }
+    return completedSubTopics
+  }
+
   // Calculate total subtopics
   const totalSubtopics = levels.reduce((total, level) => total + (level.contents_count ?? 0), 0)
+
+  // Get completed subtopics count
+  const completedSubtopicsCount = parseCompletedSubTopics(enrollment?.completedSubTopics).length
 
   return (
     <div className="p-6">
@@ -446,7 +468,7 @@ export default function ModuleDetailPage() {
                     <div>
                       <span className="text-muted-foreground">Subtopics:</span>
                       <span className="font-medium ml-2">
-                        {enrollment.completedSubTopics?.length || 0}/{totalSubtopics}
+                        {completedSubtopicsCount}/{totalSubtopics}
                       </span>
                     </div>
                     <div>
