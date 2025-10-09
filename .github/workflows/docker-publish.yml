@@ -189,107 +189,15 @@ jobs:
                 SEED_ADMIN_PASSWORD=Admin@123!
                 ENDFILE
 
-                # ===== FIXED MYSQL CONTAINER SETUP =====
-                echo "Cleaning up existing MySQL containers and volumes..."
-                docker stop mysql-gspa 2>/dev/null || echo "No MySQL container to stop"
-                docker rm mysql-gspa 2>/dev/null || echo "No MySQL container to remove"
-                docker volume rm mysql_gspa_data 2>/dev/null || echo "No volume to remove"
-
-                # Create MySQL container with better configuration
-                echo "Starting MySQL Docker container..."
-                docker run -d \
-                  --name mysql-gspa \
-                  -e "MYSQL_ROOT_PASSWORD=$MYSQL_ROOT_PASSWORD" \
-                  -e "MYSQL_DATABASE=$MYSQL_DATABASE" \
-                  -e "MYSQL_USER=$MYSQL_USER" \
-                  -e "MYSQL_PASSWORD=$MYSQL_PASSWORD" \
-                  -p 3306:3306 \
-                  -v mysql_gspa_data:/var/lib/mysql \
-                  --restart unless-stopped \
-                  mysql:8.0 \
-                  --default-authentication-plugin=mysql_native_password \
-                  --innodb-buffer-pool-size=128M \
-                  --innodb-log-file-size=48M
-
-                # Wait for MySQL with IMPROVED error handling
-                echo "Waiting for MySQL to start..."
-                MAX_ATTEMPTS=30
-                ATTEMPT=1
-                
-                while [ $ATTEMPT -le $MAX_ATTEMPTS ]; do
-                  # Check if container is running
-                  if ! docker ps | grep -q mysql-gspa; then
-                    echo "❌ MySQL container is not running"
-                    docker logs mysql-gspa
-                    exit 1
-                  fi
-                  
-                  # Check for MySQL ready message
-                  if docker logs mysql-gspa 2>&1 | grep -q "ready for connections"; then
-                    echo "✅ MySQL is ready for connections!"
-                    break
-                  fi
-                  
-                  # Check for errors
-                  if docker logs mysql-gspa 2>&1 | grep -q "ERROR"; then
-                    echo "❌ MySQL startup error detected:"
-                    docker logs mysql-gspa | grep "ERROR" | tail -5
-                    exit 1
-                  fi
-                  
-                  echo "⏳ Waiting for MySQL... attempt $ATTEMPT/$MAX_ATTEMPTS"
-                  sleep 3
-                  ATTEMPT=$((ATTEMPT + 1))
-                  
-                  if [ $ATTEMPT -gt $MAX_ATTEMPTS ]; then
-                    echo "❌ MySQL failed to start within timeout period"
-                    echo "=== MySQL Container Logs ==="
-                    docker logs mysql-gspa
-                    echo "=== Container Status ==="
-                    docker ps -a
-                    echo "=== Volume Status ==="
-                    docker volume ls
-                    exit 1
-                  fi
-                done
-
-                # Additional health check with retry
-                echo "Performing MySQL health check..."
-                for i in {1..10}; do
-                  if docker exec mysql-gspa mysqladmin ping -uroot -p"$MYSQL_ROOT_PASSWORD" --silent 2>/dev/null; then
-                    echo "✅ MySQL health check passed"
-                    break
-                  else
-                    echo "⏳ MySQL not responding to ping... retry $i/10"
-                    sleep 2
-                  fi
-                  if [ $i -eq 10 ]; then
-                    echo "❌ MySQL health check failed"
-                    docker logs mysql-gspa --tail 20
-                    exit 1
-                  fi
-                done
-
-                # Create user and grant privileges (with error suppression)
-                echo "Setting up database user..."
-                docker exec mysql-gspa mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "
-                  CREATE USER IF NOT EXISTS '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD';
-                  GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'%';
-                  FLUSH PRIVILEGES;
-                " 2>/dev/null || echo "User might already exist, continuing..."
-
-                # Verify user access
-                echo "Verifying database user access..."
-                if docker exec mysql-gspa mysql -u"$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "SELECT 1;" 2>/dev/null; then
-                  echo "✅ Database user authenticated successfully"
+                # Verify MySQL connection to existing database
+                echo "Verifying connection to existing MySQL database..."
+                if mysql -h localhost -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
+                  echo "✅ Successfully connected to existing MySQL database"
                 else
-                  echo "❌ Database user authentication failed"
-                  echo "Debug info:"
-                  docker exec mysql-gspa mysql -uroot -p"$MYSQL_ROOT_PASSWORD" -e "SELECT User, Host FROM mysql.user;" 2>/dev/null
+                  echo "❌ Failed to connect to existing MySQL database"
+                  echo "Please ensure MySQL is running on the VPS and credentials are correct"
                   exit 1
                 fi
-
-                echo "✅ MySQL Docker container setup complete"
                 
                 # ===== APPLICATION DEPLOYMENT =====
                 # Stop and remove existing app container
