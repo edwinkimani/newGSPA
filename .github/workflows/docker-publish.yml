@@ -81,7 +81,7 @@ jobs:
           if [ ! -d "prisma" ]; then
             echo "❌ prisma directory not found - creating it"
             mkdir -p prisma
-            cat <<EOF > prisma/schema.prisma
+            cat > prisma/schema.prisma <<'EOF'
             generator client {
               provider = "prisma-client-js"
             }
