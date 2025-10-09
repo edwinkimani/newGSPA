@@ -144,7 +144,7 @@ jobs:
 
       - name: Get commit SHA for image tag
         id: sha
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+        run: echo "sha_short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
 
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.0
@@ -193,8 +193,15 @@ jobs:
             SHA_SHORT="${{ steps.sha.outputs.sha_short }}"
             SELECTED_TAG="main-$SHA_SHORT"
 
-            echo "Pulling latest image..."
-            docker pull $IMAGE_NAME:$SELECTED_TAG || docker pull $IMAGE_NAME:latest
+            echo "Pulling image..."
+            if docker pull $IMAGE_NAME:$SELECTED_TAG 2>/dev/null; then
+              TAG_TO_USE=$SELECTED_TAG
+              echo "Using tagged image: $TAG_TO_USE"
+            else
+              echo "Tagged image not found, pulling latest..."
+              docker pull $IMAGE_NAME:latest
+              TAG_TO_USE=latest
+            fi
 
             echo "Starting new container..."
             docker run -d \
@@ -202,7 +209,7 @@ jobs:
               --env-file /home/${{ secrets.SSH_USER }}/app/.env \
               -p 3000:3000 \
               --restart unless-stopped \
-              $IMAGE_NAME:$SELECTED_TAG
+              $IMAGE_NAME:$TAG_TO_USE
 
             echo "Waiting for app to start..."
             for i in {1..30}; do
