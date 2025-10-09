@@ -81,21 +81,20 @@ jobs:
           if [ ! -d "prisma" ]; then
             echo "❌ prisma directory not found - creating it"
             mkdir -p prisma
-            cat > prisma/schema.prisma <<'EOF'
-            generator client {
-              provider = "prisma-client-js"
-            }
-
-            datasource db {
-              provider = "mysql"
-              url      = env("DATABASE_URL")
-            }
-
-            model Example {
-              id   Int    @id @default(autoincrement())
-              name String
-            }
-            EOF
+            # Create basic schema using echo commands
+            echo 'generator client {' > prisma/schema.prisma
+            echo '  provider = "prisma-client-js"' >> prisma/schema.prisma
+            echo '}' >> prisma/schema.prisma
+            echo '' >> prisma/schema.prisma
+            echo 'datasource db {' >> prisma/schema.prisma
+            echo '  provider = "mysql"' >> prisma/schema.prisma
+            echo '  url      = env("DATABASE_URL")' >> prisma/schema.prisma
+            echo '}' >> prisma/schema.prisma
+            echo '' >> prisma/schema.prisma
+            echo 'model Example {' >> prisma/schema.prisma
+            echo '  id   Int    @id @default(autoincrement())' >> prisma/schema.prisma
+            echo '  name String' >> prisma/schema.prisma
+            echo '}' >> prisma/schema.prisma
             echo "✅ Created prisma directory with basic schema"
           else
             echo "✅ prisma directory exists"
