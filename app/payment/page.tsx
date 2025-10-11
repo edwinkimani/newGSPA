@@ -34,6 +34,7 @@ export default function PaymentPage() {
     const [paymentSuccess, setPaymentSuccess] = useState(false)
     const [paymentType, setPaymentType] = useState<'membership' | 'test' | 'retake' | 'module'>('membership')
     const [initializingPayment, setInitializingPayment] = useState(false)
+    const [isClient, setIsClient] = useState(false)
     const router = useRouter()
   // use REST API client
 
@@ -43,24 +44,71 @@ export default function PaymentPage() {
      const RETAKE_FEE = 4550 // 45 USD in cents
 
   useEffect(() => {
+    setIsClient(true)
+  }, [])
+
+  useEffect(() => {
+    if (!isClient) return
+
     const getUserProfile = async () => {
       const urlParams = new URLSearchParams(window.location.search)
+      console.log('Payment page URL params:', Object.fromEntries(urlParams.entries()))
+
       const requestedType = urlParams.get('type') as 'membership' | 'test' | 'retake' | 'module' | null
       const moduleId = urlParams.get('moduleId')
-      const reference = urlParams.get('reference')
+      const reference = urlParams.get('reference') || urlParams.get('trxref')
+
+      // Set payment type from URL if returning from payment (fallback)
+      if (reference && requestedType) {
+        setPaymentType(requestedType)
+      }
 
       // Handle payment verification if returning from Paystack
       if (reference) {
+        console.log('Processing payment return with reference:', reference)
+
+        // No need to wait for module loading anymore - we get it from verification metadata
+
         try {
           const verifyResponse = await fetch(`/api/paystack/verify?reference=${reference}`)
+          console.log('Verify response status:', verifyResponse.status)
           const verifyData = await verifyResponse.json()
+          console.log('Verify response data:', verifyData)
 
           if (verifyResponse.ok && verifyData.data.status === 'success') {
+            console.log('Payment verification successful, processing success...')
+
+            // Extract payment type and module ID from Paystack metadata
+            const metadata = verifyData.data.metadata || {}
+            const paymentTypeFromMeta = metadata.payment_type || requestedType
+            const moduleIdFromMeta = metadata.module_id
+            const moduleIdFromUrl = urlParams.get('moduleId') // Also check URL params
+
+            console.log('Payment metadata:', { paymentTypeFromMeta, moduleIdFromMeta, moduleIdFromUrl })
+
+            // Update payment type if different
+            if (paymentTypeFromMeta && paymentTypeFromMeta !== paymentType) {
+              setPaymentType(paymentTypeFromMeta)
+            }
+
+            // Load module if it's a module payment and we have moduleId
+            const moduleIdToUse = moduleIdFromMeta || moduleIdFromUrl
+            if (paymentTypeFromMeta === 'module' && moduleIdToUse && !module) {
+              try {
+                const moduleData = await fetchJson(`/api/modules/${moduleIdToUse}`)
+                setModule(moduleData)
+                console.log('Loaded module from metadata/URL:', moduleData)
+              } catch (err) {
+                console.error('Failed to load module from metadata/URL:', err)
+              }
+            }
+
             // Payment successful, proceed with success handling
             await handlePaymentSuccess({ reference })
             return
           } else {
-            alert('Payment verification failed. Please contact support.')
+            console.log('Payment verification failed:', verifyData)
+            alert(`Payment verification failed: ${verifyData.message || 'Unknown error'}. Please contact support.`)
             router.push('/payment')
             return
           }
@@ -130,30 +178,43 @@ export default function PaymentPage() {
     }
 
     getUserProfile()
-  }, [router])
+  }, [router, isClient])
 
   const handlePaymentSuccess = async (reference: any) => {
-    if (!user) return
+    console.log('handlePaymentSuccess called with reference:', reference)
+    if (!user) {
+      console.log('No user found, returning')
+      return
+    }
 
     try {
   if (paymentType === 'module' && module) {
-        // Handle module enrollment
-        const urlParams = new URLSearchParams(window.location.search)
-        const examDate = urlParams.get('examDate')
+       console.log('Handling module payment for module:', module)
+       // Handle module enrollment
+       const examDate = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('examDate') : null
 
-        const enrollmentData = {
-          moduleId: module.id,
-          paymentReference: reference.reference
-        }
+       const enrollmentData = {
+         moduleId: module.id,
+         paymentReference: reference.reference,
+         examDate: examDate
+       }
 
-        const res = await apiFetch('/api/user-enrollments', { method: 'POST', body: JSON.stringify(enrollmentData), headers: { 'Content-Type': 'application/json' } })
-        if (!res.ok) throw new Error('Enrollment failed')
+       console.log('Creating enrollment with data:', enrollmentData)
+       const res = await apiFetch('/api/user-enrollments', { method: 'POST', body: JSON.stringify(enrollmentData), headers: { 'Content-Type': 'application/json' } })
+       console.log('Enrollment API response status:', res.status)
+       if (!res.ok) {
+         const errorText = await res.text()
+         console.error('Enrollment failed:', errorText)
+         throw new Error('Enrollment failed')
+       }
 
-        setPaymentSuccess(true)
+       console.log('Setting payment success to true')
+       setPaymentSuccess(true)
 
-        setTimeout(() => {
-          router.push(`/dashboard/my-modules/${module.id}`)
-        }, 3000)
+       setTimeout(() => {
+         console.log('Redirecting to module page:', `/dashboard/my-modules/${module.id}`)
+         router.push(`/dashboard/my-modules/${module.id}`)
+       }, 3000)
       } else {
         // Handle other payment types
         const updateData: any = {}
@@ -228,6 +289,7 @@ export default function PaymentPage() {
           amount: getAmount(),
           reference: paystackConfig.reference,
           metadata: paystackConfig.metadata,
+          callback_url: `${window.location.origin}/payment`,
         }),
       })
 
@@ -277,6 +339,7 @@ export default function PaymentPage() {
       user_id: user?.id,
       payment_type: paymentType,
       module_id: module?.id || null,
+      examDate: paymentType === 'module' && typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('examDate') : null,
       custom_fields: [
         {
           display_name: getPaymentTitle(),
@@ -285,6 +348,8 @@ export default function PaymentPage() {
         },
       ],
     },
+    // Store payment type in reference for redirect handling
+    payment_type: paymentType,
   }
 
   if (isLoading) {
@@ -292,7 +357,17 @@ export default function PaymentPage() {
       <div className="min-h-screen flex flex-col">
         <Navigation />
         <main className="flex-1 flex items-center justify-center">
-          <Loader2 className="h-8 w-8 animate-spin" />
+          <div className="text-center">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+            <p>Loading payment details...</p>
+            {/* Debug info */}
+            {typeof window !== 'undefined' && (
+              <div className="mt-4 p-4 bg-muted rounded text-sm text-left max-w-md">
+                <p><strong>URL Params:</strong></p>
+                <pre className="text-xs">{JSON.stringify(Object.fromEntries(new URLSearchParams(window.location.search)), null, 2)}</pre>
+              </div>
+            )}
+          </div>
         </main>
         <Footer />
       </div>

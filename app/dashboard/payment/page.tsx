@@ -7,7 +7,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { CreditCard, CheckCircle, AlertCircle, Loader2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter, useSearchParams } from "next/navigation"
-import { useSession } from "next-auth/react" // Keep import but don't use
+import { useSession } from "next-auth/react"
 
 interface UserProfile {
   id: string
@@ -20,202 +20,280 @@ interface UserProfile {
 }
 
 export default function DashboardPaymentPage() {
-   const [user, setUser] = useState<UserProfile | null>(null)
-   const [isLoading, setIsLoading] = useState(true)
-   const [paymentSuccess, setPaymentSuccess] = useState(false)
-   const [paymentType, setPaymentType] = useState<'membership' | 'test' | 'retake' | 'module'>('membership')
-   const [moduleId, setModuleId] = useState<string | null>(null)
-   const [examDate, setExamDate] = useState<string | null>(null)
-   const [moduleData, setModuleData] = useState<any>(null)
-   const [moduleDataLoading, setModuleDataLoading] = useState(false)
-   const [initializingPayment, setInitializingPayment] = useState(false)
-   const router = useRouter()
-   const searchParams = useSearchParams()
-   const supabase = createClient()
+  const [user, setUser] = useState<UserProfile | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [paymentSuccess, setPaymentSuccess] = useState(false)
+  const [paymentType, setPaymentType] = useState<'membership' | 'test' | 'retake' | 'module'>('membership')
+  const [moduleId, setModuleId] = useState<string | null>(null)
+  const [examDate, setExamDate] = useState<string | null>(null)
+  const [moduleData, setModuleData] = useState<any>(null)
+  const [moduleDataLoading, setModuleDataLoading] = useState(false)
+  const [initializingPayment, setInitializingPayment] = useState(false)
+  const [verifyingPayment, setVerifyingPayment] = useState(false)
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const supabase = createClient()
 
   const PAYSTACK_PUBLIC_KEY = process.env.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY || "pk_test_your_key_here"
-   const MEMBERSHIP_FEE = 7000 // 70 USD in cents
-   const TEST_FEE = 6500 // 65 USD in cents
-   const RETAKE_FEE = 4550 // 45 USD in cents
+  const MEMBERSHIP_FEE = 7000
+  const TEST_FEE = 6500
+  const RETAKE_FEE = 4550
 
+  // Load user data first
   useEffect(() => {
     const getUserProfile = async () => {
-      const requestedType = searchParams.get('type') as 'membership' | 'test' | 'retake' | 'module' | null
-      const requestedModuleId = searchParams.get('moduleId')
-      const requestedExamDate = searchParams.get('examDate')
-      const reference = searchParams.get('reference')
+      try {
+        const requestedType = searchParams.get('type') as 'membership' | 'test' | 'retake' | 'module' | null
+        const requestedModuleId = searchParams.get('moduleId')
+        const requestedExamDate = searchParams.get('examDate')
 
-      // Handle payment verification if returning from Paystack
-      if (reference) {
-        try {
-          const verifyResponse = await fetch(`/api/paystack/verify?reference=${reference}`)
-          const verifyData = await verifyResponse.json()
-
-          if (verifyResponse.ok && verifyData.data.status === 'success') {
-            // Payment successful, proceed with success handling
-            await handlePaymentSuccess({ reference })
-            return
-          } else {
-            alert('Payment verification failed. Please contact support.')
-            router.push('/dashboard/payment')
-            return
-          }
-        } catch (error) {
-          console.error('Payment verification error:', error)
-          alert('Payment verification failed. Please contact support.')
-          router.push('/dashboard/payment')
+        // Use the same authentication as dashboard
+        const res = await fetch('/api/auth/user')
+        if (res.status === 401) {
+          router.push("/auth/login")
           return
         }
-      }
+        if (!res.ok) {
+          router.push("/register")
+          return
+        }
 
-      // Use the same authentication as dashboard
-      const res = await fetch('/api/auth/user')
-      if (res.status === 401) {
-        router.push("/auth/login")
-        return
-      }
-      if (!res.ok) {
-        router.push("/register")
-        return
-      }
+        const data = await res.json()
+        const profile = data.profile
 
-      const data = await res.json()
-      const profile = data.profile
+        if (!profile) {
+          router.push("/register")
+          return
+        }
 
-      if (!profile) {
-        router.push("/register")
-        return
-      }
+        setUser(profile)
 
-      setUser(profile)
+        // Handle module payment
+        if (requestedType === 'module' && requestedModuleId) {
+          setPaymentType('module')
+          setModuleId(requestedModuleId)
+          setExamDate(requestedExamDate)
+          setModuleDataLoading(true)
 
-      // Handle module payment
-      if (requestedType === 'module' && requestedModuleId) {
-        setPaymentType('module')
-        setModuleId(requestedModuleId)
-        setExamDate(requestedExamDate)
-        setModuleDataLoading(true)
-
-        // Fetch module data
-        try {
-          const moduleResponse = await fetch(`/api/modules/${requestedModuleId}`, {
-            credentials: 'include'
-          })
-          if (moduleResponse.ok) {
-            const moduleInfo = await moduleResponse.json()
-            setModuleData(moduleInfo)
-          } else {
-            console.error('Failed to fetch module data:', moduleResponse.status)
-            // Try to get module data from enrollment if fetch fails
-            try {
-              const enrollmentResponse = await fetch('/api/user-enrollments', {
-                credentials: 'include'
-              })
-              if (enrollmentResponse.ok) {
-                const enrollments = await enrollmentResponse.json()
-                const userEnrollment = enrollments.find((e: any) => e.moduleId === requestedModuleId)
-                if (userEnrollment) {
-                  setModuleData(userEnrollment.module)
-                }
-              }
-            } catch (enrollmentError) {
-              console.error('Failed to fetch enrollment data:', enrollmentError)
-            }
-          }
-        } catch (error) {
-          console.error('Error fetching module data:', error)
-          // Fallback: try to get from enrollment
           try {
-            const enrollmentResponse = await fetch('/api/user-enrollments', {
+            const moduleResponse = await fetch(`/api/modules/${requestedModuleId}`, {
               credentials: 'include'
             })
-            if (enrollmentResponse.ok) {
-              const enrollments = await enrollmentResponse.json()
-              const userEnrollment = enrollments.find((e: any) => e.moduleId === requestedModuleId)
-              if (userEnrollment) {
-                setModuleData(userEnrollment.module)
-              }
+            if (moduleResponse.ok) {
+              const moduleInfo = await moduleResponse.json()
+              setModuleData(moduleInfo)
             }
-          } catch (enrollmentError) {
-            console.error('Failed to fetch enrollment data:', enrollmentError)
-          }
-        } finally {
-          setModuleDataLoading(false)
-        }
-      } else {
-        // Handle other payment types
-        if (profile.membership_fee_paid && profile.payment_status === "completed" && !requestedType) {
-          // Default to retake if test completed and failed, else test
-          if (profile.test_completed) {
-            setPaymentType('retake')
-          } else {
-            setPaymentType('test')
+          } catch (error) {
+            console.error('Error fetching module data:', error)
+          } finally {
+            setModuleDataLoading(false)
           }
         } else {
-          setPaymentType(requestedType || (profile.membership_fee_paid ? 'test' : 'membership'))
+          // Handle other payment types
+          if (profile.membership_fee_paid && profile.payment_status === "completed" && !requestedType) {
+            setPaymentType(profile.test_completed ? 'retake' : 'test')
+          } else {
+            setPaymentType(requestedType || (profile.membership_fee_paid ? 'test' : 'membership'))
+          }
         }
-      }
 
-      setIsLoading(false)
+        setIsLoading(false)
+      } catch (error) {
+        console.error('Error loading user profile:', error)
+        setIsLoading(false)
+      }
     }
 
     getUserProfile()
   }, [router, searchParams])
 
-  const handlePaymentSuccess = async (reference: any) => {
-    if (!user) return
+  // Verify payment after user data is loaded
+  useEffect(() => {
+    const verifyPayment = async () => {
+      // Don't verify if still loading user data or if user is not loaded
+      if (isLoading || !user) return
+
+      const reference = searchParams.get('reference')
+      const trxref = searchParams.get('trxref')
+      const paymentReference = reference || trxref
+
+      // If no payment reference, we're not returning from Paystack
+      if (!paymentReference) return
+
+      // If we already processed this payment, skip
+      if (paymentSuccess) return
+
+      console.log('Processing Paystack return with reference:', paymentReference)
+      setVerifyingPayment(true)
+
+      try {
+        console.log('Calling verify API with reference:', paymentReference)
+        const verifyResponse = await fetch(`/api/paystack/verify?reference=${paymentReference}`)
+        
+        if (!verifyResponse.ok) {
+          throw new Error(`HTTP error! status: ${verifyResponse.status}`)
+        }
+        
+        const verifyData = await verifyResponse.json()
+        console.log('Verify response data:', verifyData)
+
+        if (verifyData.data && verifyData.data.status === 'success') {
+          console.log('Payment verification successful')
+          
+          // Extract payment info from metadata
+          const metadata = verifyData.data.metadata || {}
+          const paymentTypeFromMeta = metadata.payment_type || searchParams.get('type') as 'membership' | 'test' | 'retake' | 'module' | null
+          const moduleIdFromMeta = metadata.module_id || searchParams.get('moduleId')
+          const examDateFromMeta = metadata.exam_date || searchParams.get('examDate')
+
+          console.log('Processing payment success with user:', user.id)
+          await handlePaymentSuccess({
+            reference: verifyData.data,
+            paymentType: paymentTypeFromMeta,
+            moduleId: moduleIdFromMeta,
+            examDate: examDateFromMeta
+          })
+        } else {
+          console.error('Payment verification failed:', verifyData)
+
+          // Try fallback with URL parameters
+          console.log('Trying fallback with URL parameters...')
+          const paymentTypeFromUrl = searchParams.get('type') as 'membership' | 'test' | 'retake' | 'module' | null
+          const moduleIdFromUrl = searchParams.get('moduleId')
+          const examDateFromUrl = searchParams.get('examDate')
+
+          console.log('URL fallback parameters:', { paymentTypeFromUrl, moduleIdFromUrl, examDateFromUrl })
+
+          if (paymentTypeFromUrl) {
+            await handlePaymentSuccess({
+              reference: { reference: paymentReference },
+              paymentType: paymentTypeFromUrl,
+              moduleId: moduleIdFromUrl,
+              examDate: examDateFromUrl
+            })
+          } else {
+            alert(`Payment verification failed: ${verifyData.message || 'Unknown error'}. Please contact support.`)
+            setVerifyingPayment(false)
+
+            // Clean up URL to prevent infinite retry
+            const cleanUrl = window.location.pathname
+            window.history.replaceState({}, '', cleanUrl)
+          }
+        }
+      } catch (error) {
+        console.error('Payment verification error:', error)
+        alert('Payment verification failed. Please contact support.')
+        setVerifyingPayment(false)
+        
+        // Clean up URL to prevent infinite retry
+        const cleanUrl = window.location.pathname
+        window.history.replaceState({}, '', cleanUrl)
+      }
+    }
+
+    verifyPayment()
+  }, [user, isLoading, searchParams, paymentSuccess]) // Add dependencies
+
+  const handlePaymentSuccess = async (params: any) => {
+    console.log('handlePaymentSuccess called with params:', params)
+    const { reference, paymentType: paymentTypeParam, moduleId: moduleIdParam, examDate: examDateParam } = params
+    
+    if (!user) {
+      console.error('No user found for payment success')
+      return
+    }
+
+    // Use passed parameters or fall back to state
+    const currentPaymentType = paymentTypeParam || paymentType
+    const currentModuleId = moduleIdParam || moduleId
+    const currentExamDate = examDateParam || examDate
+
+    console.log('Processing payment success:', { 
+      currentPaymentType, 
+      currentModuleId, 
+      currentExamDate, 
+      reference: reference.reference,
+      userId: user.id 
+    })
 
     try {
-      if (paymentType === 'module' && moduleId) {
+      if (currentPaymentType === 'module' && currentModuleId) {
         // Complete the module enrollment
-        console.log('Completing module enrollment:', { moduleId, reference: reference.reference, examDate })
+        console.log('Completing module enrollment for module:', currentModuleId)
+
+        const requestBody = {
+          moduleId: currentModuleId,
+          paymentReference: reference.reference,
+          paymentStatus: 'COMPLETED',
+          examDate: currentExamDate
+        }
+
+        console.log('Sending enrollment request body:', requestBody)
+
         const response = await fetch('/api/user-enrollments', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           credentials: 'include',
-          body: JSON.stringify({
-            moduleId: moduleId,
-            paymentReference: reference.reference,
-            paymentStatus: 'COMPLETED',
-            examDate: examDate
-          })
+          body: JSON.stringify(requestBody)
         })
 
+        console.log('Enrollment API response status:', response.status)
+
+        const responseText = await response.text()
+        console.log('Enrollment API response text:', responseText)
+
         if (!response.ok) {
-          const errorData = await response.json()
-          console.error('Enrollment completion failed:', errorData)
-          throw new Error(errorData.error || `Failed to complete enrollment (${response.status})`)
+          let errorMessage = `HTTP ${response.status}`
+          try {
+            const errorData = JSON.parse(responseText)
+            errorMessage = errorData.error || errorMessage
+            console.error('Enrollment completion failed - parsed error:', errorData)
+          } catch (parseError) {
+            console.error('Enrollment completion failed - raw response:', responseText)
+            errorMessage = responseText || errorMessage
+          }
+          throw new Error(`Failed to complete enrollment: ${errorMessage}`)
         }
-        console.log('Enrollment completed successfully')
+
+        try {
+          const responseData = JSON.parse(responseText)
+          console.log('Enrollment completed successfully:', responseData)
+        } catch (parseError) {
+          console.log('Enrollment completed (response not JSON):', responseText)
+        }
       } else {
         // Handle other payment types
         const updateData: any = {}
 
-        if (paymentType === 'membership') {
+        if (currentPaymentType === 'membership') {
           updateData.membership_fee_paid = true
           updateData.membership_payment_reference = reference.reference
-        } else if (paymentType === 'test') {
+        } else if (currentPaymentType === 'test') {
           updateData.payment_status = "completed"
           updateData.payment_reference = reference.reference
-        } else if (paymentType === 'retake') {
+        } else if (currentPaymentType === 'retake') {
           updateData.payment_status = "completed"
-          updateData.test_completed = false // Allow retake
+          updateData.test_completed = false
           updateData.test_score = null
           updateData.payment_reference = reference.reference
         }
 
+        console.log('Updating user profile with:', updateData)
         // Update Supabase profile
         const { error } = await supabase
           .from("profiles")
           .update(updateData)
           .eq("id", user.id)
 
-        if (error) throw error
+        if (error) {
+          console.error('Supabase update error:', error)
+          throw error
+        }
 
         // Also update Prisma profile for membership payment
-        if (paymentType === 'membership' && user?.id) {
+        if (currentPaymentType === 'membership') {
           const response = await fetch(`/api/profiles/${user.id}`, {
             method: 'PUT',
             headers: {
@@ -229,26 +307,35 @@ export default function DashboardPaymentPage() {
 
           if (!response.ok) {
             console.error('Failed to update Prisma profile')
-            // Don't throw here, Supabase update succeeded
           }
         }
       }
 
+      console.log('Payment processing completed successfully')
       setPaymentSuccess(true)
+      setVerifyingPayment(false)
 
       localStorage.setItem("paid-user-id", user.id)
 
+      // Clean up URL parameters to prevent re-verification
+      const cleanUrl = window.location.pathname
+      window.history.replaceState({}, '', cleanUrl)
+
+      // Redirect after a short delay
       setTimeout(() => {
+        console.log('Redirecting to dashboard')
         router.push("/dashboard?payment=success")
-      }, 3000)
+      }, 2000)
+
     } catch (error) {
       console.error("Payment update error:", error)
+      setVerifyingPayment(false)
       alert("Payment was successful but there was an error updating your status. Please contact support.")
+      
+      // Clean up URL even on error
+      const cleanUrl = window.location.pathname
+      window.history.replaceState({}, '', cleanUrl)
     }
-  }
-
-  const handlePaymentClose = () => {
-    console.log("Payment cancelled")
   }
 
   const handleInitializePayment = async () => {
@@ -266,6 +353,7 @@ export default function DashboardPaymentPage() {
           amount: getAmount(),
           reference: paystackConfig.reference,
           metadata: paystackConfig.metadata,
+          callback_url: `${window.location.origin}/dashboard/payment`,
         }),
       })
 
@@ -292,10 +380,9 @@ export default function DashboardPaymentPage() {
       case 'retake': return RETAKE_FEE
       case 'module':
         if (moduleData && moduleData.price) {
-          return moduleData.price * 100 // Convert to cents
+          return moduleData.price * 100
         }
-        // If module data not available, show loading or error
-        return 0 // This will prevent payment until data loads
+        return 0
       default: return MEMBERSHIP_FEE
     }
   }
@@ -315,25 +402,30 @@ export default function DashboardPaymentPage() {
     email: user?.email || "",
     amount: getAmount(),
     publicKey: PAYSTACK_PUBLIC_KEY,
-    currency: "USD",
     metadata: {
       user_id: user?.id,
       payment_type: paymentType,
       module_id: moduleId,
       exam_date: examDate,
-      custom_fields: [
-        {
-          display_name: getPaymentTitle(),
-          variable_name: "payment_type",
-          value: paymentType,
-        },
-      ],
     },
+  }
+
+  // Show loading state during verification
+  if (verifyingPayment) {
+    return (
+      <div className="flex items-center justify-center min-h-[400px]">
+        <div className="text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
+          <p className="text-muted-foreground">Verifying your payment...</p>
+          <p className="text-sm text-muted-foreground mt-2">This may take a few moments</p>
+        </div>
+      </div>
+    )
   }
 
   if (isLoading || (paymentType === 'module' && moduleDataLoading)) {
     return (
-      <div className="flex items-center justify-center py-8">
+      <div className="flex items-center justify-center min-h-[400px]">
         <div className="text-center">
           <Loader2 className="h-8 w-8 animate-spin mx-auto mb-4" />
           <p className="text-muted-foreground">
@@ -346,7 +438,7 @@ export default function DashboardPaymentPage() {
 
   if (!user) {
     return (
-      <div className="flex items-center justify-center py-8">
+      <div className="flex items-center justify-center min-h-[400px]">
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
           <AlertDescription>Please complete your registration first.</AlertDescription>
@@ -377,8 +469,11 @@ export default function DashboardPaymentPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="text-center">
-              <Button onClick={() => router.push("/dashboard?payment=success")} className="w-full">
-                Return to Dashboard
+              <p className="text-sm text-muted-foreground mb-4">
+                Redirecting to dashboard...
+              </p>
+              <Button onClick={() => router.push("/dashboard?payment=success")}>
+                Go to Dashboard Now
               </Button>
             </CardContent>
           </Card>
@@ -459,7 +554,7 @@ export default function DashboardPaymentPage() {
               <Button
                 onClick={handleInitializePayment}
                 disabled={getAmount() === 0 || initializingPayment}
-                className="w-full h-12 px-4 py-2 rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none"
+                className="w-full h-12"
               >
                 {getAmount() === 0 ? 'Loading payment details...' : initializingPayment ? (
                   <>
@@ -470,22 +565,6 @@ export default function DashboardPaymentPage() {
                   `Pay $${getAmount() / 100} with Paystack`
                 )}
               </Button>
-            </div>
-
-            <div className="text-center text-sm text-muted-foreground">
-              <p>By proceeding with payment, you agree to our terms and conditions.</p>
-              <p className="mt-2">
-                {paymentType === 'membership'
-                  ? 'After payment, you become a GSPA member and can access the dashboard to take the security aptitude test.'
-                  : paymentType === 'test'
-                  ? 'After payment, you can take the 30-question security aptitude test and receive immediate results.'
-                  : paymentType === 'retake'
-                  ? 'After payment, you can retake the security aptitude test with a new set of questions.'
-                  : paymentType === 'module'
-                  ? `After payment, you can access the ${moduleData?.title} module and start your learning journey with structured content and assessments.`
-                  : 'After payment, you will have access to the requested service.'
-                } All payments are processed in USD.
-              </p>
             </div>
           </CardContent>
         </Card>

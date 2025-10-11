@@ -1,107 +1,183 @@
-import { NextResponse } from 'next/server'
-import { getServerSession } from 'next-auth'
-import { prisma } from '@/lib/prisma/client'
+import { NextResponse } from "next/server"
+import { getServerSession } from "next-auth"
+import { prisma } from "@/lib/prisma/client"
 import { authOptions } from '@/lib/auth/config'
 
 export async function POST(request: Request) {
   try {
     const session = await getServerSession(authOptions)
-    if (!session?.user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
 
     const body = await request.json()
-    const {
-      levelTestId,
-      moduleId,
-      levelId,
-      score,
-      totalQuestions,
-      correctAnswers,
-      answers,
-      passed,
-      timeSpent
-    } = body
+    const { levelTestId, moduleId, levelId, score, totalQuestions, correctAnswers, answers, passed } = body
 
-    if (!levelTestId || !moduleId || !levelId) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
+    if (!levelTestId || !moduleId || !levelId || score === undefined) {
+      return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
 
-    // Use raw SQL query to avoid Prisma client type issues until schema is regenerated
-    const existingResult = await prisma.$queryRaw`
-      SELECT id FROM LevelTestResult
-      WHERE userId = ${session.user.id} AND levelTestId = ${levelTestId}
-    ` as any[]
+    // Check if user already has a result for this level test
+    const existingResult = await prisma.levelTestResult.findUnique({
+      where: {
+        userId_levelTestId: {
+          userId: session.user.id,
+          levelTestId,
+        },
+      },
+    })
 
     let result
-    if (existingResult && existingResult.length > 0) {
+    if (existingResult) {
       // Update existing result
-      result = await prisma.$queryRaw`
-        UPDATE LevelTestResult
-        SET score = ${score}, totalQuestions = ${totalQuestions}, correctAnswers = ${correctAnswers},
-            answers = ${JSON.stringify(answers)}, passed = ${passed}, timeSpent = ${timeSpent},
-            completedAt = NOW()
-        WHERE id = ${existingResult[0].id}
-      `
+      result = await prisma.levelTestResult.update({
+        where: {
+          id: existingResult.id,
+        },
+        data: {
+          score,
+          totalQuestions,
+          correctAnswers,
+          answers,
+          passed,
+          completedAt: new Date(),
+        },
+      })
     } else {
       // Create new result
-      result = await prisma.$queryRaw`
-        INSERT INTO LevelTestResult
-        (id, userId, levelTestId, moduleId, levelId, score, totalQuestions, correctAnswers, answers, passed, timeSpent, completedAt, createdAt)
-        VALUES
-        (UUID(), ${session.user.id}, ${levelTestId}, ${moduleId}, ${levelId}, ${score}, ${totalQuestions}, ${correctAnswers}, ${JSON.stringify(answers)}, ${passed}, ${timeSpent}, NOW(), NOW())
-      `
+      result = await prisma.levelTestResult.create({
+        data: {
+          userId: session.user.id,
+          levelTestId,
+          moduleId,
+          levelId,
+          score,
+          totalQuestions,
+          correctAnswers,
+          answers,
+          passed,
+        },
+      })
     }
 
-    // If the user passed the level test, check if all levels are completed for module test scheduling
-    if (passed) {
-      try {
-        // Find the user's enrollment for this module
-        const enrollment = await prisma.moduleEnrollment.findUnique({
-          where: {
-            userId_moduleId: {
-              userId: session.user.id,
-              moduleId: moduleId,
-            },
-          },
-          include: {
-            module: {
-              include: {
-                levels: {
-                  include: {
-                    subTopics: true,
-                  },
-                },
-              },
-            },
-          },
-        })
+    // Update ModuleEnrollment levelTestScores JSON column
+    const enrollment = await prisma.moduleEnrollment.findUnique({
+      where: {
+        userId_moduleId: {
+          userId: session.user.id,
+          moduleId,
+        },
+      },
+    })
 
-        if (enrollment) {
-          // Get current completed subtopics array
-          const completedSubTopics = enrollment.completedSubTopics as string[] || []
+    if (enrollment) {
+      // Use type assertion since Prisma client may not be regenerated yet
+      const enrollmentWithScores = enrollment as any
+      const currentLevelTestScores = enrollmentWithScores.levelTestScores ? JSON.parse(enrollmentWithScores.levelTestScores as string) : {}
 
-          // Check if all levels in the module are now completed (all their subtopics completed)
-          const allLevelsCompleted = enrollment.module.levels.every(level => {
-            const levelSubTopicIds = level.subTopics?.map((st: any) => st.id) || []
-            const completedLevelSubTopics = completedSubTopics.filter(stId => levelSubTopicIds.includes(stId))
-            return levelSubTopicIds.length > 0 && levelSubTopicIds.every(stId => completedLevelSubTopics.includes(stId))
-          })
-
-          if (allLevelsCompleted && enrollment.examDate) {
-            console.log(`All levels completed for module ${moduleId} by user ${session.user.id}. Module test scheduled for ${enrollment.examDate}`)
-            // TODO: Send notification/email about module test scheduling
-          }
-        }
-      } catch (enrollmentError) {
-        console.error('Error checking module completion:', enrollmentError)
-        // Don't fail the test result save if enrollment check fails
+      // Update level test score
+      currentLevelTestScores[levelId] = {
+        score,
+        passed,
+        completedAt: new Date().toISOString(),
+        totalQuestions,
+        correctAnswers
       }
+
+      // Update the levelTestScores JSON column
+      await prisma.moduleEnrollment.update({
+        where: {
+          id: enrollment.id,
+        },
+        data: {
+          levelTestScores: JSON.stringify(currentLevelTestScores),
+        } as any,
+      })
     }
 
-    return NextResponse.json({ success: true, message: 'Level test result saved successfully' })
+    return NextResponse.json(result)
   } catch (error) {
-    console.error('Error saving level test result:', error)
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 })
+    console.error("Error saving level test result:", error)
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
+  }
+}
+
+export async function GET(request: Request) {
+  try {
+    const session = await getServerSession(authOptions)
+    if (!session?.user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+    const url = new URL(request.url)
+    const levelTestId = url.searchParams.get('levelTestId')
+    const userId = url.searchParams.get('userId') || session.user.id
+
+    // Check permissions - users can only see their own results unless they're admin
+    const profile = await prisma.profile.findUnique({
+      where: { id: session.user.id },
+      include: { role: true },
+    })
+
+    const isAdminOrMaster = ["admin", "master_practitioner"].includes(profile?.role?.name || "")
+    if (userId !== session.user.id && !isAdminOrMaster) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
+    if (levelTestId) {
+      // Get specific test result
+      const result = await prisma.levelTestResult.findUnique({
+        where: {
+          userId_levelTestId: {
+            userId,
+            levelTestId,
+          },
+        },
+        include: {
+          levelTest: true,
+          level: true,
+          module: true,
+        },
+      })
+
+      if (!result) {
+        return NextResponse.json({ error: "Test result not found" }, { status: 404 })
+      }
+
+      return NextResponse.json(result)
+    } else {
+      // Get all test results for the user
+      const results = await prisma.levelTestResult.findMany({
+        where: { userId },
+        include: {
+          levelTest: true,
+          level: true,
+          module: true
+        },
+        orderBy: { completedAt: 'desc' }
+      })
+
+      return NextResponse.json(results.map(result => ({
+        id: result.id,
+        score: result.score,
+        totalQuestions: result.totalQuestions,
+        correctAnswers: result.correctAnswers,
+        answers: result.answers,
+        passed: result.passed,
+        completedAt: result.completedAt,
+        levelTest: {
+          id: result.levelTest.id,
+          title: result.levelTest.title,
+          description: result.levelTest.description
+        },
+        level: {
+          id: result.level.id,
+          title: result.level.title
+        },
+        module: {
+          id: result.module.id,
+          title: result.module.title
+        }
+      })))
+    }
+  } catch (error) {
+    console.error("Error fetching level test result:", error)
+    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 })
   }
 }

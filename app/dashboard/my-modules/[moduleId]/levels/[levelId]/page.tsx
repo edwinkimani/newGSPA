@@ -1,4 +1,4 @@
-  "use client"
+"use client"
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
@@ -211,15 +211,16 @@ export default function LevelDetailPage() {
       // Get subtopic test results to mark completed tests
       console.log("Fetching subtopic test results for user:", userId, "level:", levelId)
       try {
-        const testResultsRes = await fetch(`/api/sub-topic-test-results?userId=${userId}&levelId=${levelId}`)
+        const testResultsRes = await fetch(`/api/sub-topic-test-results?userId=${userId}`)
         console.log("Test results response status:", testResultsRes.status)
         if (testResultsRes.ok) {
           const testResultsData = await testResultsRes.json()
           console.log("Test results data:", testResultsData)
           const completedTests = new Set<string>()
           testResultsData.forEach((result: any) => {
-            if (result.passed) {
-              completedTests.add(result.subTopicTest.subTopicId)
+            // Only count tests for this level and that are passed
+            if (result.passed && result.level.id === levelId) {
+              completedTests.add(result.subTopic.id)
             }
           })
           setCompletedSubtopicsWithTests(completedTests)
@@ -270,12 +271,34 @@ export default function LevelDetailPage() {
     return getLevelProgress() === 100
   }
 
+  const areAllSubtopicsFullyCompleted = () => {
+    // Check if all subtopics are completed AND all their tests are passed
+    return subtopics.every((subtopic: any) => {
+      const subtopicContents = subtopic.contents.filter((c: any) => c.isPublished)
+      const contentCompleted = subtopicContents.length > 0 &&
+        subtopicContents.every((c: any) => isContentCompleted(c.id))
+
+      // If subtopic has a test, it must be passed
+      const hasTest = subtopic.subTopicTest
+      const testPassed = hasTest ? completedSubtopicsWithTests.has(subtopic.id) : true
+
+      return contentCompleted && testPassed
+    })
+  }
+
   const isContentCompleted = (contentId: string) => {
     return userProgress.some((p: any) => p.content_id === contentId && p.completed)
   }
 
   const markSubtopicComplete = async (subtopicId: string) => {
     if (!enrollment || !session?.user) return
+
+    // Check if subtopic has a test and if it has been completed
+    const subtopic = subtopics.find(s => s.id === subtopicId)
+    if (subtopic?.subTopicTest && !completedSubtopicsWithTests.has(subtopicId)) {
+      alert('You must complete the subtopic test before marking this subtopic as complete.')
+      return
+    }
 
     try {
       // Mark subtopic as completed using the API
@@ -396,9 +419,8 @@ export default function LevelDetailPage() {
 
       {/* Left Sidebar - Accordion Navigation */}
       <div
-        className={`fixed top-0 left-0 h-screen w-80 bg-slate-900 border-r border-gray-600 flex flex-col z-40 transition-transform duration-300 ${
-          isSidebarOpen ? "translate-x-0" : "-translate-x-full"
-        } md:translate-x-0`}
+        className={`fixed top-0 left-0 h-screen w-80 bg-slate-900 border-r border-gray-600 flex flex-col z-40 transition-transform duration-300 ${isSidebarOpen ? "translate-x-0" : "-translate-x-full"
+          } md:translate-x-0`}
       >
         {/* Header in Sidebar */}
         <div className="p-6 border-b border-gray-600">
@@ -438,7 +460,7 @@ export default function LevelDetailPage() {
                 <span className="text-sm font-medium text-white">Progress</span>
                 <span className="text-sm text-gray-300">{getLevelProgress()}%</span>
               </div>
-              <Progress value={getLevelProgress()} className="h-2" />
+              <Progress value={getLevelProgress()} className="h-2 [&>div]:bg-gradient-to-r [&>div]:from-yellow-400 [&>div]:to-yellow-600" />
               <div className="flex justify-between items-center mt-2 text-xs">
                 <span className="text-gray-300">
                   {getCompletedSubtopics()} / {getTotalSubtopics()} completed
@@ -472,6 +494,11 @@ export default function LevelDetailPage() {
                 const completed =
                   subtopicContents.length > 0 && subtopicContents.every((c: any) => isContentCompleted(c.id))
 
+                // Check if subtopic has a test and if it's been completed
+                const hasTest = subtopic.subTopicTest
+                const testCompleted = completedSubtopicsWithTests.has(subtopic.id)
+                const testRequired = hasTest && !testCompleted
+
                 // Check if this subtopic is accessible (first one or previous is completed)
                 const isAccessible =
                   subtopicIndex === 0 ||
@@ -487,34 +514,37 @@ export default function LevelDetailPage() {
                   <AccordionItem
                     key={subtopic.id}
                     value={subtopic.id}
-                    className={`border rounded-lg ${
-                      completed
-                        ? "bg-green-900/20 border-green-600"
+                    className={`border rounded-lg ${completed && testCompleted
+                      ? "bg-green-900/20 border-green-600"
+                      : completed && testRequired
+                        ? "bg-orange-900/20 border-orange-600"
                         : isAccessible
                           ? "bg-gray-800 border-gray-600"
                           : "bg-gray-900/50 border-gray-700 opacity-60"
-                    }`}
+                      }`}
                     disabled={!isAccessible && !completed}
                   >
                     <AccordionTrigger
-                      className={`px-4 py-3 hover:no-underline text-left ${
-                        isAccessible || completed
-                          ? "text-white hover:bg-gray-700 cursor-pointer"
-                          : "text-gray-500 cursor-not-allowed"
-                      }`}
+                      className={`px-4 py-3 hover:no-underline text-left ${isAccessible || completed
+                        ? "text-white hover:bg-gray-700 cursor-pointer"
+                        : "text-gray-500 cursor-not-allowed"
+                        }`}
                     >
                       <div className="flex items-center gap-3 flex-1">
                         <div
-                          className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${
-                            completed
-                              ? "bg-green-600 text-white"
+                          className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 ${completed && testCompleted
+                            ? "bg-green-600 text-white"
+                            : completed && testRequired
+                              ? "bg-orange-600 text-white"
                               : isAccessible
                                 ? "bg-blue-600 text-white"
                                 : "bg-gray-600 text-gray-400"
-                          }`}
+                            }`}
                         >
-                          {completed ? (
+                          {completed && testCompleted ? (
                             <CheckCircle className="h-4 w-4" />
+                          ) : completed && testRequired ? (
+                            <AlertCircle className="h-4 w-4" />
                           ) : isAccessible ? (
                             <BookOpen className="h-4 w-4" />
                           ) : (
@@ -523,14 +553,15 @@ export default function LevelDetailPage() {
                         </div>
                         <div className="text-left flex-1">
                           <h3
-                            className={`font-medium text-sm leading-tight ${
-                              isAccessible || completed ? "text-white" : "text-gray-500"
-                            }`}
+                            className={`font-medium text-sm leading-tight ${isAccessible || completed ? "text-white" : "text-gray-500"
+                              }`}
                           >
                             {subtopic.title}
                           </h3>
                           <p className={`text-xs ${isAccessible || completed ? "text-gray-400" : "text-gray-600"}`}>
                             {subtopicContents.length} item{subtopicContents.length !== 1 ? "s" : ""}
+                            {hasTest && testCompleted && " • Test Passed"}
+                            {hasTest && !testCompleted && completed && " • Test Required"}
                             {!isAccessible && !completed && " (Locked)"}
                           </p>
                         </div>
@@ -542,9 +573,8 @@ export default function LevelDetailPage() {
                           <div key={item.id} className="text-sm">
                             <div className="flex items-center gap-2">
                               <div
-                                className={`w-2 h-2 rounded-full ${
-                                  isContentCompleted(item.id) ? "bg-green-500" : "bg-gray-500"
-                                }`}
+                                className={`w-2 h-2 rounded-full ${isContentCompleted(item.id) ? "bg-green-500" : "bg-gray-500"
+                                  }`}
                               />
                               <span className={isContentCompleted(item.id) ? "text-green-400" : "text-gray-300"}>
                                 {item.title}
@@ -563,23 +593,39 @@ export default function LevelDetailPage() {
                               {isLast ? "Complete Level" : "Next Subtopic"}
                             </Button>
                           )}
-                          {completed && (
+                          {completed && testRequired && (
+                            <div className="space-y-2">
+                              <div className="text-center text-orange-400 text-sm font-medium">
+                                ⚠️ Test Required
+                              </div>
+                              <Button
+                                asChild
+                                size="sm"
+                                className="w-full bg-orange-600 hover:bg-orange-700 text-white"
+                              >
+                                <Link
+                                  href={`/dashboard/my-modules/${moduleId}/levels/${levelId}/subtopics/${subtopic.id}/test`}
+                                >
+                                  <FileText className="h-4 w-4 mr-2" />
+                                  Take Required Test
+                                </Link>
+                              </Button>
+                            </div>
+                          )}
+                          {completed && testCompleted && (
                             <div className="space-y-2">
                               <div className="text-center text-green-400 text-sm font-medium">✓ Completed</div>
-                              {completedSubtopicsWithTests.has(subtopic.id) && (
-                                <Button
-                                  asChild
-                                  size="sm"
-                                  className="w-full bg-purple-600 hover:bg-purple-700 text-white"
-                                >
-                                  <Link
-                                    href={`/dashboard/my-modules/${moduleId}/levels/${levelId}/subtopics/${subtopic.id}/test`}
-                                  >
-                                    <FileText className="h-4 w-4 mr-2" />
-                                    Take Subtopic Test
-                                  </Link>
-                                </Button>
-                              )}
+                              <div className="bg-green-900/20 border border-green-600 rounded-lg p-3 text-center">
+                                <div className="text-green-400 text-sm font-medium mb-1">Test Passed ✓</div>
+                                <div className="text-green-300 text-xs">
+                                  Subtopic test completed successfully
+                                </div>
+                              </div>
+                            </div>
+                          )}
+                          {completed && !hasTest && (
+                            <div className="space-y-2">
+                              <div className="text-center text-green-400 text-sm font-medium">✓ Completed</div>
                             </div>
                           )}
                           {subtopicContents.length === 0 && (
@@ -596,162 +642,227 @@ export default function LevelDetailPage() {
         </div>
 
         {/* Level Test & Next Level in Sidebar Footer */}
-        {(isLevelCompleted() || (isLevelCompleted() && level.levelTestId)) && (
-          <div className="p-4 border-t border-gray-600 space-y-3">
-            {isLevelCompleted() && level.levelTestId && (
-              <Button asChild className="w-full bg-green-600 hover:bg-green-700 text-white" size="sm">
+        <div className="p-4 border-t border-gray-600 space-y-3">
+          {/* Level Test Button - Always visible but grayed out until all subtopics are completed */}
+          <div className="space-y-2">
+            <div className="text-xs text-gray-400 text-center">
+              Level Assessment
+            </div>
+            <Button
+              asChild={areAllSubtopicsFullyCompleted()}
+              disabled={!areAllSubtopicsFullyCompleted()}
+              className={`w-full ${
+                areAllSubtopicsFullyCompleted()
+                  ? "bg-green-600 hover:bg-green-700 text-white"
+                  : "bg-gray-700 text-gray-500 cursor-not-allowed opacity-60"
+              }`}
+              size="sm"
+            >
+              {areAllSubtopicsFullyCompleted() ? (
                 <Link href={`/dashboard/my-modules/${moduleId}/levels/${levelId}/test`}>
                   <FileText className="h-4 w-4 mr-2" />
                   Take Level Test
                 </Link>
-              </Button>
-            )}
-
-            {isLevelCompleted() && (
-              <Button
-                asChild
-                variant="outline"
-                className="w-full border-gray-600 text-white hover:bg-gray-700 bg-transparent"
-                size="sm"
-              >
-                <Link href={`/dashboard/my-modules/${moduleId}`}>Back to Module</Link>
-              </Button>
+              ) : (
+                <span className="flex items-center">
+                  <FileText className="h-4 w-4 mr-2" />
+                  Complete All Subtopics First
+                </span>
+              )}
+            </Button>
+            {!areAllSubtopicsFullyCompleted() && (
+              <div className="text-xs text-gray-500 text-center">
+                Finish all subtopics and their tests to unlock
+              </div>
             )}
           </div>
-        )}
+
+          {/* Back to Module Button */}
+          <Button
+            asChild
+            variant="outline"
+            className="w-full border-gray-600 text-white hover:bg-gray-700 bg-transparent"
+            size="sm"
+          >
+            <Link href={`/dashboard/my-modules/${moduleId}`}>Back to Module</Link>
+          </Button>
+        </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="md:ml-80 p-8 pt-16 md:pt-8 min-h-screen">
-        <div className="w-full max-w-none">
-          {openAccordion !== "" ? (
-            (() => {
-              const selectedSubtopic = subtopics.find((s: any) => s.id === openAccordion)
-              return (
-                <div className="space-y-6">
-                  <div className="text-center mb-8">
-                    <h2 className="text-3xl font-bold mb-2">{selectedSubtopic?.title}</h2>
-                    <p className="text-muted-foreground text-lg">
-                      Read through the content below and click "Next Subtopic" when you're done.
-                    </p>
-                  </div>
-
-                  {isLoadingContent ? (
-                    <div className="text-center py-8">
-                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-                      <p className="text-muted-foreground">Loading content...</p>
+      <div className="md:ml-80 flex-1 min-h-screen">
+        <div className="flex justify-center p-8 pt-16 md:pt-8">
+          <div className="w-full max-w-4xl"> {/* Changed from max-w-none to max-w-4xl and centered */}
+            {openAccordion !== "" ? (
+              (() => {
+                const selectedSubtopic = subtopics.find((s: any) => s.id === openAccordion)
+                return (
+                  <div className="space-y-6">
+                    <div className="text-center mb-8">
+                      <h2 className="text-3xl font-bold mb-2">{selectedSubtopic?.title}</h2>
+                      <p className="text-muted-foreground text-lg">
+                        Read through the content below and click "Next Subtopic" when you're done.
+                      </p>
                     </div>
-                  ) : selectedSubtopicContent.length === 0 ? (
-                    <Card className="p-12 bg-gradient-to-br from-blue-50/50 to-purple-50/50 dark:from-blue-950/10 dark:to-purple-950/10 border-blue-200/50 dark:border-blue-800/50">
-                      <div className="text-center space-y-6">
-                        <div className="w-24 h-24 mx-auto bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/50 dark:to-purple-900/50 rounded-full flex items-center justify-center">
-                          <BookOpen className="h-12 w-12 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div className="space-y-2">
-                          <h3 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
-                            Content Coming Soon
-                          </h3>
-                          <p className="text-muted-foreground text-lg max-w-md mx-auto">
-                            We're working hard to prepare engaging content for this subtopic.
-                            Check back soon for an amazing learning experience!
-                          </p>
-                        </div>
-                        <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
-                          <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
-                          <span>In Development</span>
-                        </div>
+
+                    {isLoadingContent ? (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+                        <p className="text-muted-foreground">Loading content...</p>
                       </div>
-                    </Card>
-                  ) : (
-                    selectedSubtopicContent.map((item: any, index: number) => (
-                      <Card key={item.id} className="p-8 shadow-lg">
-                        <div className="mb-6">
-                          <h3 className="text-2xl font-semibold mb-3">{item.title}</h3>
-                          {item.description && <p className="text-muted-foreground text-lg mb-6">{item.description}</p>}
+                    ) : selectedSubtopicContent.length === 0 ? (
+                      <Card className="p-12 bg-gradient-to-br from-blue-50/50 to-purple-50/50 dark:from-blue-950/10 dark:to-purple-950/10 border-blue-200/50 dark:border-blue-800/50">
+                        <div className="text-center space-y-6">
+                          <div className="w-24 h-24 mx-auto bg-gradient-to-br from-blue-100 to-purple-100 dark:from-blue-900/50 dark:to-purple-900/50 rounded-full flex items-center justify-center">
+                            <BookOpen className="h-12 w-12 text-blue-600 dark:text-blue-400" />
+                          </div>
+                          <div className="space-y-2">
+                            <h3 className="text-2xl font-semibold text-gray-900 dark:text-gray-100">
+                              Content Coming Soon
+                            </h3>
+                            <p className="text-muted-foreground text-lg max-w-md mx-auto">
+                              We're working hard to prepare engaging content for this subtopic.
+                              Check back soon for an amazing learning experience!
+                            </p>
+                          </div>
+                          <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                            <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+                            <span>In Development</span>
+                          </div>
                         </div>
-
-                        {/* Content Display */}
-                        {item.contentType === "NOTES" && item.contentText && (
-                          <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-8 shadow-sm relative overflow-hidden">
-                            <div className="prose prose-slate dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-4">
-                              <div
-                                className="text-slate-800 dark:text-slate-200 leading-normal text-base [&>p]:my-2 [&>p+*]:mt-2 [&>br+*]:mt-1"
-                                dangerouslySetInnerHTML={{
-                                  __html: item.contentText.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>"),
-                                }}
-                              />
-                            </div>
-                            {/* Decorative element */}
-                            <div className="absolute top-4 right-4 w-20 h-20 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-xl pointer-events-none"></div>
-                          </div>
-                        )}
-
-                        {item.contentType === "VIDEO" && item.contentUrl && (
-                          <div className="aspect-video bg-black rounded-lg flex items-center justify-center">
-                            <Button asChild size="lg">
-                              <a href={item.contentUrl} target="_blank" rel="noopener noreferrer">
-                                <Play className="h-16 w-16 mr-4" />
-                                <span className="text-lg">Watch Video</span>
-                              </a>
-                            </Button>
-                          </div>
-                        )}
-
-                        {item.contentType === "DOCUMENT" && item.contentUrl && (
-                          <div className="p-12 border-2 border-dashed border-gray-300 rounded-lg text-center">
-                            <FileText className="h-20 w-20 text-gray-400 mx-auto mb-6" />
-                            <Button asChild variant="outline" size="lg">
-                              <a href={item.contentUrl} target="_blank" rel="noopener noreferrer">
-                                <ExternalLink className="h-6 w-6 mr-3" />
-                                <span className="text-lg">View Document</span>
-                              </a>
-                            </Button>
-                          </div>
-                        )}
                       </Card>
-                    ))
-                  )}
+                    ) : (
+                      selectedSubtopicContent.map((item: any, index: number) => (
+                        <Card key={item.id} className="p-8 shadow-lg">
+                          <div className="mb-6">
+                            <h3 className="text-2xl font-semibold mb-3">{item.title}</h3>
+                            {item.description && <p className="text-muted-foreground text-lg mb-6">{item.description}</p>}
+                          </div>
 
-                  {/* Take Test Button - Show if subtopic has a test */}
-                  {selectedSubtopic && selectedSubtopic.subTopicTest && (
-                    <Card className="p-8 bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border-blue-200 dark:border-blue-800">
-                      <div className="text-center space-y-4">
-                        <div className="w-16 h-16 mx-auto bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center">
-                          <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400" />
-                        </div>
-                        <div>
-                          <h3 className="text-lg font-semibold mb-2">Ready for a Test?</h3>
-                          <p className="text-muted-foreground text-sm">
-                            Test your knowledge with {selectedSubtopic.subTopicTest.questions?.length || 0} questions.
-                          </p>
-                        </div>
-                        <Button
-                          asChild
-                          size="lg"
-                          className="bg-blue-600 hover:bg-blue-700 text-white px-8"
-                        >
-                          <Link
-                            href={`/dashboard/my-modules/${moduleId}/levels/${levelId}/subtopics/${selectedSubtopic.id}/test`}
-                          >
-                            <FileText className="h-5 w-5 mr-2" />
-                            Take Test
-                          </Link>
-                        </Button>
-                      </div>
-                    </Card>
-                  )}
+                          {/* Content Display */}
+                          {item.contentType === "NOTES" && item.contentText && (
+                            <div className="bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-800 dark:to-slate-900 border border-slate-200 dark:border-slate-700 rounded-xl p-8 shadow-sm relative overflow-hidden">
+                              <div className="prose prose-slate dark:prose-invert max-w-none prose-p:my-2 prose-headings:my-4">
+                                <div
+                                  className="text-slate-800 dark:text-slate-200 leading-normal text-base [&>p]:my-2 [&>p+*]:mt-2 [&>br+*]:mt-1"
+                                  dangerouslySetInnerHTML={{
+                                    __html: item.contentText.replace(/\n\n/g, "</p><p>").replace(/\n/g, "<br>"),
+                                  }}
+                                />
+                              </div>
+                              {/* Decorative element */}
+                              <div className="absolute top-4 right-4 w-20 h-20 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full blur-xl pointer-events-none"></div>
+                            </div>
+                          )}
+
+                          {item.contentType === "VIDEO" && item.contentUrl && (
+                            <div className="aspect-video bg-black rounded-lg flex items-center justify-center">
+                              <Button asChild size="lg">
+                                <a href={item.contentUrl} target="_blank" rel="noopener noreferrer">
+                                  <Play className="h-16 w-16 mr-4" />
+                                  <span className="text-lg">Watch Video</span>
+                                </a>
+                              </Button>
+                            </div>
+                          )}
+
+                          {item.contentType === "DOCUMENT" && item.contentUrl && (
+                            <div className="p-12 border-2 border-dashed border-gray-300 rounded-lg text-center">
+                              <FileText className="h-20 w-20 text-gray-400 mx-auto mb-6" />
+                              <Button asChild variant="outline" size="lg">
+                                <a href={item.contentUrl} target="_blank" rel="noopener noreferrer">
+                                  <ExternalLink className="h-6 w-6 mr-3" />
+                                  <span className="text-lg">View Document</span>
+                                </a>
+                              </Button>
+                            </div>
+                          )}
+                        </Card>
+                      ))
+                    )}
+
+                    {/* Take Test Button - Show if subtopic has a test */}
+                    {selectedSubtopic && selectedSubtopic.subTopicTest && (() => {
+                      const hasTakenTest = completedSubtopicsWithTests.has(selectedSubtopic.id)
+
+                      return (
+                        <Card className={`p-8 transition-all duration-300 ${hasTakenTest
+                            ? "bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600 opacity-70"
+                            : "bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-950/20 dark:to-purple-950/20 border-blue-200 dark:border-blue-800"
+                          }`}>
+                          <div className="text-center space-y-4">
+                            <div className={`w-16 h-16 mx-auto rounded-full flex items-center justify-center ${hasTakenTest
+                                ? "bg-gray-300 dark:bg-gray-700 text-gray-500 dark:text-gray-400"
+                                : "bg-blue-100 dark:bg-blue-900 text-blue-600 dark:text-blue-400"
+                              }`}>
+                              <FileText className="h-8 w-8" />
+                            </div>
+                            <div>
+                              <h3 className={`text-lg font-semibold mb-2 ${hasTakenTest ? "text-gray-500 dark:text-gray-400" : ""
+                                }`}>
+                                {hasTakenTest ? "Test Completed" : "Ready for a Test?"}
+                              </h3>
+                              <p className={`text-sm ${hasTakenTest ? "text-gray-400 dark:text-gray-500" : "text-muted-foreground"
+                                }`}>
+                                {hasTakenTest
+                                  ? "You have already completed this test."
+                                  : `Test your knowledge with ${selectedSubtopic.subTopicTest.questions?.length || 0} questions.`
+                                }
+                              </p>
+                            </div>
+                            {hasTakenTest ? (
+                              <div className="space-y-3">
+                                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3">
+                                  <div className="flex items-center justify-center gap-2 text-green-700 dark:text-green-300">
+                                    <CheckCircle className="h-4 w-4" />
+                                    <span className="text-sm font-medium">Test Completed Successfully</span>
+                                  </div>
+                                </div>
+                                <Button
+                                  asChild
+                                  variant="outline"
+                                  size="lg"
+                                  className="w-full border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700"
+                                >
+                                  <Link
+                                    href={`/dashboard/my-modules/${moduleId}/levels/${levelId}/subtopics/${selectedSubtopic.id}/test/results`}
+                                  >
+                                    <FileText className="h-5 w-5 mr-2" />
+                                    Review Test
+                                  </Link>
+                                </Button>
+                              </div>
+                            ) : (
+                              <Button
+                                asChild
+                                size="lg"
+                                className="bg-blue-600 hover:bg-blue-700 text-white px-8"
+                              >
+                                <Link
+                                  href={`/dashboard/my-modules/${moduleId}/levels/${levelId}/subtopics/${selectedSubtopic.id}/test`}
+                                >
+                                  <FileText className="h-5 w-5 mr-2" />
+                                  Take Test
+                                </Link>
+                              </Button>
+                            )}
+                          </div>
+                        </Card>
+                      )
+                    })()}
+                  </div>
+                )
+              })()
+            ) : (
+              <div className="flex items-center justify-center min-h-[60vh]"> {/* Centered the "Select a Subtopic" message */}
+                <div className="text-center">
+                  <BookOpen className="h-32 w-32 text-muted-foreground mx-auto mb-8" />
+                  <h3 className="text-2xl font-semibold mb-4">Select a Subtopic</h3>
+                  <p className="text-muted-foreground text-lg">Choose a subtopic from the sidebar to start learning.</p>
                 </div>
-              )
-            })()
-          ) : (
-            <div className="fixed inset-0 flex items-center justify-center bg-background z-10">
-              <div className="text-center">
-                <BookOpen className="h-32 w-32 text-muted-foreground mx-auto mb-8" />
-                <h3 className="text-2xl font-semibold mb-4">Select a Subtopic</h3>
-                <p className="text-muted-foreground text-lg">Choose a subtopic from the sidebar to start learning.</p>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

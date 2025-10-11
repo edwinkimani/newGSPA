@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Calendar, Clock, BookOpen, FileText, Video, CheckCircle, Play, ExternalLink, AlertCircle, Timer } from "lucide-react"
+import { Calendar, Clock, BookOpen, FileText, Video, CheckCircle, Play, ExternalLink, AlertCircle, Timer, Award } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { format } from "date-fns"
 import { useSession } from "next-auth/react"
@@ -29,9 +29,17 @@ interface Enrollment {
   exam_completed: boolean
   exam_score: number | null
   completedSubTopics: string[]
+  levelTestScores?: Record<string, {
+    score: number
+    passed: boolean
+    completedAt: string
+    totalQuestions: number
+    correctAnswers: number
+  }>
 }
 
 interface Level {
+  levelTest: boolean
   id: string
   title: string
   description: string
@@ -41,6 +49,9 @@ interface Level {
   level_test_id?: string
   contents_count?: number
   completed_contents?: number
+  levelTestCompleted?: boolean
+  levelTestPassed?: boolean
+  levelTestScore?: number | null
 }
 
 interface UserProgress {
@@ -66,10 +77,9 @@ export default function ModuleDetailPage() {
     if (moduleId && session?.user?.id) {
       fetchModuleData()
     } else if (!session?.user?.id) {
-      // If no session, set loading to false to show the UI
       setIsLoading(false)
     }
-  }, [moduleId, session?.user?.id]) // Use session.user.id instead of session to prevent unnecessary re-renders
+  }, [moduleId, session?.user?.id])
 
   const fetchModuleData = async () => {
     try {
@@ -78,48 +88,80 @@ export default function ModuleDetailPage() {
 
       console.log('ModuleDetailPage: Fetching data for moduleId:', moduleId, 'Type:', typeof moduleId)
 
-      // Get module details from API
-      let moduleRes = await fetch(`/api/modules/${moduleId}`)
-      console.log('ModuleDetailPage: Module API response status:', moduleRes.status, 'for moduleId:', moduleId)
+      // First, try to find the module by slug/title
+      let actualModuleId = moduleId as string
+      let foundModule = null
 
-      // If not found and moduleId looks like a title/slug, try to find by title
-      if (moduleRes.status === 404 && moduleId && typeof moduleId === 'string' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(moduleId)) {
-        console.log('ModuleDetailPage: moduleId is not a UUID, trying to find by title')
-        // Try to find module by title (convert slug back to title)
-        const titleFromSlug = moduleId.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
-        console.log('ModuleDetailPage: Searching for title:', titleFromSlug)
-
-        // Get all modules and find by title
+      // If moduleId doesn't look like a UUID, search by title/slug
+      if (moduleId && typeof moduleId === 'string' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(moduleId)) {
+        console.log('ModuleDetailPage: moduleId is not a UUID, searching by title/slug')
+        
+        // Get all modules to find the one matching the slug
         const allModulesRes = await fetch('/api/modules?active=true')
         if (allModulesRes.ok) {
           const allModules = await allModulesRes.json()
-          const foundModule = allModules.find((m: any) =>
-            m.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '') === moduleId.toLowerCase() ||
-            m.title.toLowerCase() === titleFromSlug.toLowerCase()
-          )
+          console.log('All modules fetched:', allModules)
+          
+          // Try to find module by slug (convert URL slug to title format)
+          const titleFromSlug = moduleId
+            .replace(/-/g, ' ')
+            .replace(/\b\w/g, (l: string) => l.toUpperCase())
+            .replace(/\bModule\b/gi, '') // Remove "Module" if present
+            .trim()
+
+          console.log('Searching for title:', titleFromSlug)
+          
+          foundModule = allModules.find((m: any) => {
+            const moduleTitle = m.title.toLowerCase()
+            const searchTitle = titleFromSlug.toLowerCase()
+            
+            // Check exact match or contains
+            return moduleTitle === searchTitle || 
+                   moduleTitle.includes(searchTitle) ||
+                   m.title.toLowerCase().replace(/\s+/g, '-') === moduleId.toLowerCase()
+          })
+
           if (foundModule) {
-            console.log('ModuleDetailPage: Found module by title:', foundModule.id)
-            moduleRes = await fetch(`/api/modules/${foundModule.id}`)
+            console.log('ModuleDetailPage: Found module by title/slug:', foundModule)
+            actualModuleId = foundModule.id
+          } else {
+            console.log('ModuleDetailPage: No module found with title/slug:', titleFromSlug)
+            // Try one more approach - look for partial matches
+            foundModule = allModules.find((m: any) => {
+              const moduleSlug = m.title.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '')
+              return moduleSlug === moduleId.toLowerCase()
+            })
+            if (foundModule) {
+              console.log('ModuleDetailPage: Found module by exact slug match:', foundModule)
+              actualModuleId = foundModule.id
+            }
           }
         }
       }
 
+      // Now fetch module details with the actual ID
+      console.log('ModuleDetailPage: Fetching module with ID:', actualModuleId)
+      const moduleRes = await fetch(`/api/modules/${actualModuleId}`)
+      
       if (!moduleRes.ok) {
+        console.error('ModuleDetailPage: Failed to fetch module, status:', moduleRes.status)
         if (moduleRes.status === 404) {
-          console.log('ModuleDetailPage: Module not found')
           setAccessDenied(true)
           return
         }
         throw new Error('Failed to fetch module')
       }
+
       const moduleData = await moduleRes.json()
+      console.log('ModuleDetailPage: Module data received:', moduleData)
+      
       setModule({
         ...moduleData,
-        instructor_name: moduleData.instructorName,
-        duration_hours: moduleData.estimatedDuration
+        instructor_name: moduleData.instructorName || moduleData.instructor_name,
+        duration_hours: moduleData.estimatedDuration || moduleData.duration_hours
       })
 
-      // Get enrollment details from API
+      // Get enrollment details
       const enrollmentRes = await fetch(`/api/user-enrollments?userId=${session?.user?.id}`)
       if (!enrollmentRes.ok) {
         console.error('Failed to fetch enrollments')
@@ -128,56 +170,51 @@ export default function ModuleDetailPage() {
       }
       
       const enrollmentsData = await enrollmentRes.json()
-      console.log('All enrollments data:', enrollmentsData)
-      const enrollmentData = enrollmentsData.find((e: any) => e.moduleId === moduleId)
-      console.log('Found enrollment data:', enrollmentData)
+      console.log('ModuleDetailPage: All enrollments:', enrollmentsData)
+      
+      // Find enrollment for this module using the actual module ID
+      const enrollmentData = enrollmentsData.find((e: any) => e.moduleId === actualModuleId)
+      console.log('ModuleDetailPage: Found enrollment:', enrollmentData)
 
       if (!enrollmentData) {
+        console.log('ModuleDetailPage: No enrollment found for module:', actualModuleId)
         setAccessDenied(true)
         return
       }
 
-      // User is already verified as enrolled with completed payment from enrolled-modules page
       setEnrollment(enrollmentData)
 
-      // Get module levels from API regardless of payment status
-      const levelsRes = await fetch(`/api/levels?moduleId=${moduleId}`)
+      // Get module levels
+      const levelsRes = await fetch(`/api/levels?moduleId=${actualModuleId}`)
       if (levelsRes.ok) {
         const levelsData = await levelsRes.json()
+        console.log('ModuleDetailPage: Levels data:', levelsData)
 
-        // Process levels with progress information
         const levelsWithProgress = levelsData.map((level: any) => {
           const subtopicCount = level.subTopics?.length || 0
           const subtopicIds = level.subTopics?.map((st: any) => st.id) || []
-          // Ensure completedSubTopics is always an array
-          let completedSubTopics: string[] = []
-          try {
-            const rawData = enrollmentData?.completedSubTopics
-            if (Array.isArray(rawData)) {
-              completedSubTopics = rawData
-            } else if (rawData && typeof rawData === 'string') {
-              completedSubTopics = JSON.parse(rawData)
-            } else if (rawData && typeof rawData === 'object') {
-              // Handle case where it's already parsed but not an array
-              completedSubTopics = Array.isArray(rawData) ? rawData : []
-            }
-          } catch (error) {
-            console.warn('Error parsing completedSubTopics:', error)
-            completedSubTopics = []
-          }
-          console.log('Processing level:', level.title, 'completedSubTopics:', completedSubTopics, 'type:', typeof completedSubTopics)
+          const completedSubTopics = parseCompletedSubTopics(enrollmentData?.completedSubTopics)
           const completedContents = subtopicIds.filter((id: string) => completedSubTopics.includes(id)).length
+
+          // Check level test status
+          const levelTestScores = enrollmentData?.levelTestScores ? JSON.parse(enrollmentData.levelTestScores as string) : {}
+          const levelTestResult = levelTestScores[level.id]
 
           return {
             ...level,
             contents_count: subtopicCount,
-            completed_contents: completedContents
+            completed_contents: completedContents,
+            levelTestCompleted: !!levelTestResult,
+            levelTestPassed: levelTestResult?.passed || false,
+            levelTestScore: levelTestResult?.score || null
           }
         })
         setLevels(levelsWithProgress)
+      } else {
+        console.log('ModuleDetailPage: No levels found for module')
       }
 
-      // Get user progress for all content if enrollment exists
+      // Get user progress
       if (enrollmentData?.id) {
         const { data: progressData, error: progressError } = await supabase
           .from('user_progress')
@@ -208,7 +245,6 @@ export default function ModuleDetailPage() {
       const existingProgress = userProgress.find(p => p.content_id === contentId)
 
       if (existingProgress) {
-        // Update existing progress
         const { error } = await supabase
           .from('user_progress')
           .update({
@@ -220,7 +256,6 @@ export default function ModuleDetailPage() {
 
         if (error) throw error
       } else {
-        // Create new progress record
         const { error } = await supabase
           .from('user_progress')
           .insert({
@@ -234,7 +269,6 @@ export default function ModuleDetailPage() {
         if (error) throw error
       }
 
-      // Update local state
       setUserProgress(prev => {
         const existing = prev.find(p => p.content_id === contentId)
         if (existing) {
@@ -252,12 +286,57 @@ export default function ModuleDetailPage() {
         }
       })
 
-      // Update enrollment progress
+      // Check if this completes a subtopic and update enrollment
+      await checkAndCompleteSubtopic(contentId)
+
+      // Update enrollment progress to refresh level progress bars and overall progress
       await updateEnrollmentProgress()
 
     } catch (error) {
       console.error('Error marking content complete:', error)
       alert('Error updating progress. Please try again.')
+    }
+  }
+
+  const checkAndCompleteSubtopic = async (contentId: string) => {
+    try {
+      // Find which subtopic this content belongs to
+      const contentResponse = await fetch(`/api/content/${contentId}`)
+      if (!contentResponse.ok) return
+
+      const content = await contentResponse.json()
+      const subtopicId = content.subTopicId
+
+      if (!subtopicId) return
+
+      // Get all content for this subtopic
+      const subtopicResponse = await fetch(`/api/sub-topics/${subtopicId}`)
+      if (!subtopicResponse.ok) return
+
+      const subtopic = await subtopicResponse.json()
+      const allContentIds = subtopic.contents?.map((c: any) => c.id) || []
+
+      // Check if all content in this subtopic is completed
+      const completedContentIds = userProgress
+        .filter(p => p.completed && allContentIds.includes(p.content_id))
+        .map(p => p.content_id)
+
+      const isSubtopicComplete = allContentIds.length > 0 &&
+        allContentIds.every((id: string) => completedContentIds.includes(id))
+
+      if (isSubtopicComplete) {
+        // Mark subtopic as complete using the API
+        await fetch('/api/sub-topics/complete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            subTopicId: subtopicId,
+            completed: true
+          })
+        })
+      }
+    } catch (error) {
+      console.error('Error checking subtopic completion:', error)
     }
   }
 
@@ -268,16 +347,45 @@ export default function ModuleDetailPage() {
       const enrollmentRes = await fetch(`/api/user-enrollments?userId=${session.user.id}`)
       if (enrollmentRes.ok) {
         const enrollmentsData = await enrollmentRes.json()
-        const updatedEnrollment = enrollmentsData.find((e: any) => e.moduleId === moduleId)
+        const updatedEnrollment = enrollmentsData.find((e: any) => e.moduleId === module?.id)
         if (updatedEnrollment) {
-          setEnrollment(updatedEnrollment)
+          // Use the actual progressPercentage from the database
+          const enrollmentWithCalculatedProgress = {
+            ...updatedEnrollment,
+            progress_percentage: updatedEnrollment.progressPercentage || 0
+          }
+
+          setEnrollment(enrollmentWithCalculatedProgress)
+
+          // Update levels progress after enrollment update
+          if (levels.length > 0) {
+            const levelsWithUpdatedProgress = levels.map((level: any) => {
+              const subtopicCount = level.subTopics?.length || 0
+              const subtopicIds = level.subTopics?.map((st: any) => st.id) || []
+              const completedSubTopics = parseCompletedSubTopics(updatedEnrollment?.completedSubTopics)
+              const completedContents = subtopicIds.filter((id: string) => completedSubTopics.includes(id)).length
+
+              // Check level test status
+              const levelTestScores = updatedEnrollment?.levelTestScores ? JSON.parse(updatedEnrollment.levelTestScores as string) : {}
+              const levelTestResult = levelTestScores[level.id]
+
+              return {
+                ...level,
+                contents_count: subtopicCount,
+                completed_contents: completedContents,
+                levelTestCompleted: !!levelTestResult,
+                levelTestPassed: levelTestResult?.passed || false,
+                levelTestScore: levelTestResult?.score || null
+              }
+            })
+            setLevels(levelsWithUpdatedProgress)
+          }
         }
       }
     } catch (error) {
       console.error('Error refreshing enrollment progress:', error)
     }
   }
-
 
   // Countdown Timer Component
   const ExamCountdown = ({ examDate }: { examDate: string }) => {
@@ -344,6 +452,24 @@ export default function ModuleDetailPage() {
     )
   }
 
+  // Helper function to parse completedSubTopics
+  const parseCompletedSubTopics = (rawData: any): string[] => {
+    let completedSubTopics: string[] = []
+    try {
+      if (Array.isArray(rawData)) {
+        completedSubTopics = rawData
+      } else if (rawData && typeof rawData === 'string') {
+        completedSubTopics = JSON.parse(rawData)
+      } else if (rawData && typeof rawData === 'object') {
+        completedSubTopics = Array.isArray(rawData) ? rawData : (rawData.subtopics || [])
+      }
+    } catch (error) {
+      console.warn('Error parsing completedSubTopics:', error)
+      completedSubTopics = []
+    }
+    return completedSubTopics
+  }
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -371,7 +497,19 @@ export default function ModuleDetailPage() {
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
               Module not found or you don't have access.
-              {moduleId && <div className="mt-2 text-sm font-mono bg-muted p-2 rounded">Module ID: {moduleId}</div>}
+              {moduleId && (
+                <div className="mt-2">
+                  <div className="text-sm font-mono bg-muted p-2 rounded">URL Slug: {moduleId}</div>
+                  <div className="text-xs text-muted-foreground mt-2">
+                    This might be because:
+                    <ul className="text-left mt-1 space-y-1">
+                      <li>• The module doesn't exist</li>
+                      <li>• You're not enrolled in this module</li>
+                      <li>• The URL slug doesn't match any module</li>
+                    </ul>
+                  </div>
+                </div>
+              )}
             </AlertDescription>
           </Alert>
           <Button asChild>
@@ -382,29 +520,8 @@ export default function ModuleDetailPage() {
     )
   }
 
-  // Helper function to parse completedSubTopics
-  const parseCompletedSubTopics = (rawData: any): string[] => {
-    let completedSubTopics: string[] = []
-    try {
-      if (Array.isArray(rawData)) {
-        completedSubTopics = rawData
-      } else if (rawData && typeof rawData === 'string') {
-        completedSubTopics = JSON.parse(rawData)
-      } else if (rawData && typeof rawData === 'object') {
-        // Handle case where it's already parsed but not an array
-        completedSubTopics = Array.isArray(rawData) ? rawData : (rawData.subtopics || [])
-      }
-    } catch (error) {
-      console.warn('Error parsing completedSubTopics:', error)
-      completedSubTopics = []
-    }
-    return completedSubTopics
-  }
-
   // Calculate total subtopics
   const totalSubtopics = levels.reduce((total, level) => total + (level.contents_count ?? 0), 0)
-
-  // Get completed subtopics count
   const completedSubtopicsCount = parseCompletedSubTopics(enrollment?.completedSubTopics).length
 
   return (
@@ -438,7 +555,6 @@ export default function ModuleDetailPage() {
             </div>
           </div>
 
-
           {/* Progress Overview */}
           {enrollment && (
             <Card className="mb-6">
@@ -453,10 +569,10 @@ export default function ModuleDetailPage() {
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-medium">Overall Progress</span>
                     <span className="text-sm text-muted-foreground">
-                      {enrollment.progress_percentage}% complete
+                      {enrollment.progress_percentage || 0}% complete
                     </span>
                   </div>
-                  <Progress value={enrollment.progress_percentage} className="h-3 bg-gray-200" />
+                  <Progress value={enrollment.progress_percentage || 0} className="h-3 bg-gray-200 [&>div]:bg-gradient-to-r [&>div]:from-yellow-400 [&>div]:to-yellow-600" />
 
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                     <div>
@@ -473,8 +589,8 @@ export default function ModuleDetailPage() {
                     </div>
                     <div>
                       <span className="text-muted-foreground">Status:</span>
-                      <Badge variant={enrollment.progress_percentage === 100 ? "default" : "secondary"} className="ml-2">
-                        {enrollment.progress_percentage === 100 ? "Complete" : "In Progress"}
+                      <Badge variant={(enrollment.progress_percentage || 0) === 100 ? "default" : "secondary"} className="ml-2">
+                        {(enrollment.progress_percentage || 0) === 100 ? "Complete" : "In Progress"}
                       </Badge>
                     </div>
                     {enrollment.exam_completed && (
@@ -487,8 +603,8 @@ export default function ModuleDetailPage() {
                     )}
                   </div>
 
-                  {/* Exam Countdown - Show when module is 100% complete */}
-                  {enrollment.progress_percentage === 100 && enrollment.exam_date && !enrollment.exam_completed && (
+                  {/* Exam Countdown */}
+                  {(enrollment.progress_percentage || 0) === 100 && enrollment.exam_date && !enrollment.exam_completed && (
                     <div className="mt-6 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 rounded-lg border border-blue-200 dark:border-blue-800">
                       <div className="flex items-center gap-2 mb-3">
                         <Timer className="h-5 w-5 text-blue-600" />
@@ -498,8 +614,34 @@ export default function ModuleDetailPage() {
                     </div>
                   )}
 
+                  {/* Take Final Test Button - Only show if all subtopics completed but exam not taken yet */}
+                  {(enrollment.progress_percentage || 0) === 100 && !enrollment.exam_completed && (
+                    <div className="mt-6 p-6 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950 dark:to-indigo-950 rounded-lg border border-blue-200 dark:border-blue-800">
+                      <div className="text-center">
+                        <div className="w-16 h-16 bg-blue-100 dark:bg-blue-900 rounded-full flex items-center justify-center mx-auto mb-4">
+                          <Award className="h-8 w-8 text-blue-600 dark:text-blue-400" />
+                        </div>
+                        <h3 className="text-xl font-semibold text-blue-900 dark:text-blue-100 mb-2">
+                          Ready for Final Assessment
+                        </h3>
+                        <p className="text-blue-700 dark:text-blue-300 mb-6">
+                          You've completed all module content! Take the final test to earn your certificate.
+                        </p>
+                        <Button
+                          asChild
+                          size="lg"
+                          className="bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white shadow-lg hover:shadow-xl transition-all duration-200 px-8 py-3 text-lg font-semibold"
+                        >
+                          <Link href={`/dashboard/my-modules/${module.id}/test`}>
+                            Take Final Test
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+        
                   {/* Module Complete Message */}
-                  {enrollment.progress_percentage === 100 && enrollment.exam_completed && (
+                  {(enrollment.progress_percentage || 0) === 100 && enrollment.exam_completed && (
                     <Alert className="mt-4 border-green-200 bg-green-50">
                       <CheckCircle className="h-4 w-4 text-green-600" />
                       <AlertDescription className="text-green-800">
@@ -562,9 +704,14 @@ export default function ModuleDetailPage() {
                             <Badge variant={isCompleted ? "default" : "secondary"}>
                               {isCompleted ? "Completed" : "In Progress"}
                             </Badge>
-                            {isCompleted && level.level_test_id && (
+                            {isCompleted && level.levelTest && !level.levelTestCompleted && (
                               <Badge variant="outline" className="text-blue-600 border-blue-300">
                                 Test Available
+                              </Badge>
+                            )}
+                            {level.levelTestCompleted && (
+                              <Badge variant={level.levelTestPassed ? "default" : "destructive"} className={level.levelTestPassed ? "bg-green-600" : ""}>
+                                Test {level.levelTestPassed ? "Passed" : "Failed"} ({level.levelTestScore}%)
                               </Badge>
                             )}
                           </div>
@@ -587,7 +734,7 @@ export default function ModuleDetailPage() {
                             <span>Progress</span>
                             <span>{progress}% complete</span>
                           </div>
-                          <Progress value={progress} className="h-2 bg-gray-200" />
+                          <Progress value={progress} className="h-2 bg-gray-200 [&>div]:bg-gradient-to-r [&>div]:from-yellow-400 [&>div]:to-yellow-600" />
                         </div>
 
                         <div className="flex justify-between items-center">
@@ -610,19 +757,23 @@ export default function ModuleDetailPage() {
                                 disabled={!isAccessible && !isCompleted}
                                 variant={isCompleted ? "outline" : "default"}
                               >
-                                <Link href={`/dashboard/my-modules/${moduleId}/levels/${level.id}`}>
+                                <Link href={`/dashboard/my-modules/${module.id}/levels/${level.id}`}>
                                   {isCompleted ? 'Review Level' : 'Start Level'}
                                 </Link>
                               </Button>
                             )}
-                            {isCompleted && level.level_test_id && enrollment?.payment_status === 'COMPLETED' && (
+                            {isCompleted && level.levelTest && enrollment?.payment_status === 'COMPLETED' && (
                               <Button
                                 asChild
-                                variant="default"
-                                className="bg-blue-600 hover:bg-blue-700"
+                                variant={level.levelTestCompleted ? (level.levelTestPassed ? "outline" : "destructive") : "default"}
+                                className={level.levelTestCompleted ?
+                                  (level.levelTestPassed ? "border-green-600 text-green-600 hover:bg-green-50" : "bg-red-600 hover:bg-red-700") :
+                                  "bg-blue-600 hover:bg-blue-700"}
                               >
-                                <Link href={`/dashboard/my-modules/${moduleId}/levels/${level.id}/test`}>
-                                  Take Level Test
+                                <Link href={`/dashboard/my-modules/${module.id}/levels/${level.id}/test`}>
+                                  {level.levelTestCompleted ?
+                                    (level.levelTestPassed ? 'Review Test' : 'Retake Test') :
+                                    'Take Level Test'}
                                 </Link>
                               </Button>
                             )}
@@ -671,7 +822,7 @@ export default function ModuleDetailPage() {
                       Your certificate will be available within 48 hours.
                     </AlertDescription>
                   </Alert>
-                ) : enrollment.progress_percentage === 100 ? (
+                ) : (enrollment.progress_percentage || 0) === 100 ? (
                   <div className="space-y-4">
                     <Alert className="border-blue-200 bg-blue-50">
                       <CheckCircle className="h-4 w-4 text-blue-600" />
@@ -685,14 +836,14 @@ export default function ModuleDetailPage() {
                       <ExamCountdown examDate={enrollment.exam_date} />
                     </div>
 
-                    {/* Take Exam Button - only show if exam date has passed */}
+                    {/* Take Exam Button */}
                     {new Date() >= new Date(enrollment.exam_date) && (
                       <Button
                         asChild
                         className="w-full py-4 text-lg font-semibold bg-gradient-to-r from-primary to-primary/80 hover:from-primary/90 hover:to-primary"
                         size="lg"
                       >
-                        <Link href={`/dashboard/my-modules/${moduleId}/test`}>
+                        <Link href={`/dashboard/my-modules/${module.id}/test`}>
                           Take Final Exam
                         </Link>
                       </Button>

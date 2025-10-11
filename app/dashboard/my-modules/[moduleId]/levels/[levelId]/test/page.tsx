@@ -81,8 +81,12 @@ export default function LevelTestPage() {
 
   const fetchLevelTest = async () => {
     try {
+      console.log('Fetching level test for levelId:', levelId)
+      
       // Get level test using our Prisma API
       const testResponse = await fetch(`/api/level-tests?levelId=${levelId}`)
+      console.log('Test response status:', testResponse.status)
+      
       if (!testResponse.ok) {
         console.error('Level test not found:', testResponse.status)
         router.push(`/dashboard/my-modules/${moduleId}/levels/${levelId}`)
@@ -90,22 +94,32 @@ export default function LevelTestPage() {
       }
 
       const testData = await testResponse.json()
+      console.log('Raw test data received:', testData)
       setLevelTest(testData)
 
       // Parse questions from JSON - our API already resolves question IDs to full objects
       if (testData.questions && Array.isArray(testData.questions)) {
+        console.log('Questions array found with length:', testData.questions.length)
+        
         // Transform the question format to match our interface
-        const formattedQuestions: TestQuestion[] = testData.questions.map((q: any) => ({
-          id: q.id,
-          question: q.question,
-          options: q.options ? q.options.map((opt: any) => ({
-            id: opt.id,
-            option_text: opt.optionText,
-            is_correct: opt.isCorrect
-          })).sort((a: any, b: any) => (a.optionLetter || '').localeCompare(b.optionLetter || '')) : []
-        }))
+        const formattedQuestions: TestQuestion[] = testData.questions.map((q: any, index: number) => {
+          console.log(`Question ${index + 1}:`, q)
+          return {
+            id: q.id,
+            question: q.question,
+            options: q.options ? q.options.map((opt: any, optIndex: number) => ({
+              id: opt.id,
+              option_text: opt.optionText || opt.option_text,
+              is_correct: opt.isCorrect || opt.is_correct
+            })).sort((a: any, b: any) => (a.optionLetter || '').localeCompare(b.optionLetter || '')) : []
+          }
+        })
 
+        console.log('Formatted questions:', formattedQuestions)
         setQuestions(formattedQuestions)
+      } else {
+        console.warn('No questions found in test data:', testData)
+        setQuestions([])
       }
 
     } catch (error) {
@@ -117,6 +131,7 @@ export default function LevelTestPage() {
   }
 
   const startTest = () => {
+    console.log('Starting test with questions:', questions.length)
     setTestStarted(true)
   }
 
@@ -277,8 +292,8 @@ export default function LevelTestPage() {
               </div>
 
               {/* Content Section */}
-              <CardContent className="p-8">
-                <div className="space-y-8">
+              <CardContent className="p-4">
+                <div className="space-y-4">
                   {/* Statistics Grid */}
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div className="bg-card rounded-xl p-6 text-center border shadow-sm">
@@ -359,6 +374,10 @@ export default function LevelTestPage() {
   }
 
   if (!testStarted) {
+    // Use the actual questions array length instead of levelTest.totalQuestions
+    const actualQuestionCount = questions.length
+    console.log('Displaying test start page with question count:', actualQuestionCount)
+
     return (
       <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="max-w-2xl w-full">
@@ -376,8 +395,10 @@ export default function LevelTestPage() {
             <CardContent className="p-8 space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-muted/50 rounded-lg p-4 text-center border">
-                  <div className="text-2xl font-bold text-primary mb-1">{levelTest.totalQuestions}</div>
-                  <div className="text-sm text-muted-foreground">Questions</div>
+                  <div className="text-2xl font-bold text-primary mb-1">{actualQuestionCount}</div>
+                  <div className="text-sm text-muted-foreground">
+                    Question{actualQuestionCount !== 1 ? 's' : ''}
+                  </div>
                 </div>
                 <div className="bg-muted/50 rounded-lg p-4 text-center border">
                   <div className="text-2xl font-bold text-primary mb-1">{levelTest.passingScore}%</div>
@@ -385,19 +406,34 @@ export default function LevelTestPage() {
                 </div>
               </div>
 
-              <Alert className="border-blue-200 bg-blue-50">
-                <FileText className="h-4 w-4 text-blue-600" />
-                <AlertDescription className="text-blue-800">
-                  You've completed all subtopics in this level! Take this test to unlock the next level.
-                </AlertDescription>
-              </Alert>
+              {actualQuestionCount === 0 ? (
+                <Alert variant="destructive">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    This test doesn't have any questions yet. Please contact support.
+                  </AlertDescription>
+                </Alert>
+              ) : (
+                <Alert className="border-blue-200 bg-blue-50">
+                  <FileText className="h-4 w-4 text-blue-600" />
+                  <AlertDescription className="text-blue-800">
+                    You've completed all subtopics in this level! Take this test to unlock the next level.
+                    {actualQuestionCount > 0 && (
+                      <span className="block mt-1 font-medium">
+                        This test contains {actualQuestionCount} question{actualQuestionCount !== 1 ? 's' : ''}.
+                      </span>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
 
               <Button
                 onClick={startTest}
                 className="w-full py-4 text-lg font-semibold"
                 size="lg"
+                disabled={actualQuestionCount === 0}
               >
-                Start Level Test
+                {actualQuestionCount === 0 ? 'No Questions Available' : 'Start Level Test'}
               </Button>
             </CardContent>
           </Card>
@@ -406,11 +442,25 @@ export default function LevelTestPage() {
     )
   }
 
+  // Check if we have questions before rendering the test
+  if (questions.length === 0) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <Alert variant="destructive" className="max-w-md">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>
+            No questions available for this test. Please contact support.
+          </AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
   const currentQ = questions[currentQuestion]
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="max-w-2xl mx-auto p-4">
         {/* Test Header */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-6">
@@ -459,8 +509,8 @@ export default function LevelTestPage() {
           <CardContent className="p-8">
             <div className="space-y-8">
               {/* Question Text */}
-              <div className="bg-muted/50 rounded-lg p-6 border">
-                <h2 className="text-xl font-semibold leading-relaxed">
+              <div className="bg-muted/50 rounded-lg p-4 border">
+                <h2 className="text-lg font-semibold leading-relaxed">
                   {currentQ.question}
                 </h2>
               </div>
@@ -474,7 +524,7 @@ export default function LevelTestPage() {
                   className="space-y-3"
                 >
                   {currentQ.options.map((option, index) => (
-                    <div key={option.id} className="flex items-center gap-4 p-4 rounded-lg border-2 border-border bg-card hover:bg-muted/50 hover:border-primary cursor-pointer transition-all duration-200 data-[state=checked]:border-primary data-[state=checked]:bg-primary/5 data-[state=checked]:shadow-sm">
+                    <div key={option.id} className="flex items-center gap-3 p-3 rounded-lg border-2 border-border bg-card hover:bg-muted/50 hover:border-primary cursor-pointer transition-all duration-200 data-[state=checked]:border-primary data-[state=checked]:bg-primary/5 data-[state=checked]:shadow-sm">
                       <RadioGroupItem
                         value={option.id}
                         id={option.id}
@@ -495,7 +545,7 @@ export default function LevelTestPage() {
               </div>
 
               {/* Navigation */}
-              <div className="flex justify-between items-center pt-6 border-t">
+              <div className="flex justify-between items-center pt-4 border-t">
                 <Button
                   variant="outline"
                   onClick={handlePrevious}

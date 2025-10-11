@@ -18,10 +18,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'subTopicId is required' }, { status: 400 })
     }
 
-    // Get the subtopic with module info
+    // Get the subtopic with content and module info
     const subTopic = await prisma.subTopic.findUnique({
       where: { id: subTopicId },
       include: {
+        contents: true, // Get all content for this subtopic
         level: {
           include: {
             module: true
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
 // Helper function to calculate and update module progress
 async function updateModuleProgress(userId: string, moduleId: string) {
   try {
-    // Get the enrollment with completed subtopics
+    // Get the enrollment with module structure
     const enrollment = await prisma.moduleEnrollment.findUnique({
       where: {
         userId_moduleId: {

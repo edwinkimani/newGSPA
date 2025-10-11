@@ -21,11 +21,18 @@ export async function GET(request: Request) {
       include: {
         subTopics: {
           include: {
+            contents: {
+              select: {
+                id: true,
+                isPublished: true
+              }
+            },
             _count: {
               select: { contents: true }
             }
           }
-        }
+        },
+        levelTest: true
       }
     })
 

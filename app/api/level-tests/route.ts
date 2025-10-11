@@ -26,9 +26,10 @@ export async function GET(request: Request) {
       resolvedQuestions = await Promise.all(
         test.questions.map(async (question: any) => {
           if (typeof question === 'string') {
-            // It's a question ID, fetch the full question
+            // It's a question ID, fetch the full question with options
             const fullQuestion = await prisma.testQuestion.findUnique({
-              where: { id: question }
+              where: { id: question },
+              include: { options: true }
             })
             return fullQuestion
           } else {
@@ -43,7 +44,16 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       ...test,
-      questions: resolvedQuestions
+      questions: resolvedQuestions.map(q => ({
+        id: q.id,
+        question: q.question,
+        options: q.options ? q.options.map((opt: any) => ({
+          id: opt.id,
+          optionText: opt.optionText,
+          optionLetter: opt.optionLetter,
+          isCorrect: opt.isCorrect
+        })).sort((a: any, b: any) => (a.optionLetter || '').localeCompare(b.optionLetter || '')) : []
+      }))
     })
   } catch (error) {
     console.error('Error fetching level test:', error)

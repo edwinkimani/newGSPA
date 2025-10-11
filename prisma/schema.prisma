@@ -407,6 +407,7 @@ model ModuleEnrollment {
   examCompleted      Boolean       @default(false)
   examScore          Int?
   completedSubTopics Json?         // Array of completed subtopic IDs
+  levelTestScores    Json?         // Object containing level test results by levelId
   createdAt          DateTime      @default(now())
   updatedAt          DateTime      @updatedAt
 

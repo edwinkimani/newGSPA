@@ -51,6 +51,8 @@ export default function ModuleTestPage() {
   const [results, setResults] = useState<TestAttempt | null>(null)
   const [showConfetti, setShowConfetti] = useState(false)
   const [windowSize, setWindowSize] = useState({ width: 0, height: 0 })
+  const [timeLeft, setTimeLeft] = useState<number>(0)
+  const [isFullscreen, setIsFullscreen] = useState(false)
 
   useEffect(() => {
     fetchModuleTest()
@@ -68,6 +70,61 @@ export default function ModuleTestPage() {
       return () => window.removeEventListener('resize', handleResize)
     }
   }, [])
+
+  // Timer functionality
+  useEffect(() => {
+    let interval: NodeJS.Timeout
+    if (testStarted && !testCompleted && timeLeft > 0) {
+      interval = setInterval(() => {
+        setTimeLeft(prev => {
+          if (prev <= 1) {
+            // Time's up - auto-submit
+            handleSubmitTest()
+            return 0
+          }
+          return prev - 1
+        })
+      }, 1000)
+    }
+    return () => clearInterval(interval)
+  }, [testStarted, testCompleted, timeLeft])
+
+  // Fullscreen handling
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement)
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange)
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange)
+  }, [])
+
+  // Prevent exiting fullscreen during test
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (testStarted && !testCompleted && (e.key === 'Escape' || e.key === 'F11')) {
+        e.preventDefault()
+        alert('You cannot exit fullscreen until the test is completed.')
+      }
+    }
+
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (testStarted && !testCompleted) {
+        e.preventDefault()
+        e.returnValue = 'Your test is in progress. Are you sure you want to leave?'
+      }
+    }
+
+    if (testStarted && !testCompleted) {
+      document.addEventListener('keydown', handleKeyDown)
+      window.addEventListener('beforeunload', handleBeforeUnload)
+    }
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown)
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+    }
+  }, [testStarted, testCompleted])
 
   // Trigger confetti when test is passed
   useEffect(() => {
@@ -116,8 +173,31 @@ export default function ModuleTestPage() {
     }
   }
 
+  const enterFullscreen = () => {
+    if (document.documentElement.requestFullscreen) {
+      document.documentElement.requestFullscreen()
+    }
+  }
+
+  const exitFullscreen = () => {
+    if (document.exitFullscreen) {
+      document.exitFullscreen()
+    }
+  }
+
+  const formatTime = (seconds: number) => {
+    const hours = Math.floor(seconds / 3600)
+    const minutes = Math.floor((seconds % 3600) / 60)
+    const secs = seconds % 60
+    return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`
+  }
+
   const startTest = () => {
-    setTestStarted(true)
+    if (moduleTest) {
+      setTimeLeft(moduleTest.timeLimit * 60) // Convert minutes to seconds
+      enterFullscreen()
+      setTestStarted(true)
+    }
   }
 
   const handleAnswerChange = (questionId: string, answerId: string) => {
@@ -168,6 +248,7 @@ export default function ModuleTestPage() {
       setResults(testResults)
       setTestCompleted(true)
       setTestStarted(false)
+      exitFullscreen() // Exit fullscreen when test is completed
 
       // Save test results to database
       try {
@@ -387,7 +468,11 @@ export default function ModuleTestPage() {
               <Alert className="border-blue-200 bg-blue-50">
                 <Award className="h-4 w-4 text-blue-600" />
                 <AlertDescription className="text-blue-800">
-                  You've completed all levels in this module! This is the final assessment. Passing will earn you a professional certificate.
+                  <div className="space-y-2">
+                    <p>You've completed all levels in this module! This is the final assessment.</p>
+                    <p className="font-semibold">⚠️ Important: The test will run in full-screen mode with a {moduleTest.timeLimit}-minute timer. You cannot exit until the test is completed or time runs out.</p>
+                    <p>Passing will earn you a professional certificate.</p>
+                  </div>
                 </AlertDescription>
               </Alert>
 
@@ -409,21 +494,34 @@ export default function ModuleTestPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="w-full p-6">
         {/* Test Header */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-6">
-            <Button
-              variant="outline"
-              onClick={() => router.back()}
-            >
-              <ArrowLeft className="h-4 w-4 mr-2" />
-              Exit Test
-            </Button>
-            <div className="bg-muted px-4 py-2 rounded-full">
-              <span className="text-sm font-medium">
-                Question {currentQuestion + 1} of {questions.length}
-              </span>
+            <div className="flex items-center gap-4">
+              <div className="bg-muted px-4 py-2 rounded-full">
+                <span className="text-sm font-medium">
+                  Question {currentQuestion + 1} of {questions.length}
+                </span>
+              </div>
+              {/* Timer Display */}
+              <div className={`px-4 py-2 rounded-full font-mono text-lg font-bold ${
+                timeLeft < 300 ? 'bg-red-100 text-red-700 dark:bg-red-900 dark:text-red-300' :
+                timeLeft < 600 ? 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900 dark:text-yellow-300' :
+                'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+              }`}>
+                ⏱️ {formatTime(timeLeft)}
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm text-muted-foreground mb-1">Time Remaining</div>
+              <div className={`text-lg font-bold ${
+                timeLeft < 300 ? 'text-red-600' :
+                timeLeft < 600 ? 'text-yellow-600' :
+                'text-blue-600'
+              }`}>
+                {Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}
+              </div>
             </div>
           </div>
 
@@ -442,7 +540,7 @@ export default function ModuleTestPage() {
         </div>
 
         {/* Question Card */}
-        <Card className="shadow-lg">
+        <Card className="shadow-lg max-w-4xl mx-auto">
           <CardHeader className="bg-muted/50">
             <div className="flex items-center gap-3">
               <div className="w-8 h-8 bg-primary/10 rounded-full flex items-center justify-center font-bold text-sm text-primary">

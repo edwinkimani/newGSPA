@@ -9,10 +9,38 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    // Allow unauthenticated access for active modules
     const session = await getServerSession(authOptions)
-    if (!session?.user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const isAuthenticated = !!session?.user
 
-    const module = await prisma.module.findUnique({ where: { id: params.id }, include: { questions: true, enrollments: true } })
+    let whereClause: any
+
+    // Try to find by ID first
+    let module = await prisma.module.findUnique({
+      where: { id: params.id },
+      include: {
+        questions: isAuthenticated,
+        enrollments: isAuthenticated
+      }
+    })
+
+    // If not found by ID, try to find by title (handle slugs)
+    if (!module) {
+      // Convert slug back to title format
+      const titleFromSlug = params.id.replace(/-/g, ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())
+
+      module = await prisma.module.findFirst({
+        where: {
+          title: titleFromSlug,
+          ...(isAuthenticated ? {} : { isActive: true })
+        },
+        include: {
+          questions: isAuthenticated,
+          enrollments: isAuthenticated
+        }
+      })
+    }
+
     if (!module) return NextResponse.json({ error: 'Module not found' }, { status: 404 })
     return NextResponse.json(module)
   } catch (error) {

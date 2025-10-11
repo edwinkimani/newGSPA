@@ -252,11 +252,11 @@ export default function SubTopicTestPage() {
         )}
 
         <div className="relative z-10 flex items-center justify-center min-h-screen p-6">
-          <div className="max-w-2xl w-full">
+          <div className="max-w-lg w-full">
             {/* Main Results Card */}
             <Card className={`shadow-2xl border-0 overflow-hidden ${results.passed ? 'bg-gradient-to-br from-green-50 to-emerald-50 dark:from-green-950 dark:to-emerald-950' : 'bg-gradient-to-br from-red-50 to-rose-50 dark:from-red-950 dark:to-rose-950'}`}>
               {/* Header Section */}
-              <div className={`relative p-8 text-center ${results.passed ? 'bg-gradient-to-r from-green-600 to-emerald-600' : 'bg-gradient-to-r from-red-600 to-rose-600'}`}>
+              <div className={`relative p-6 text-center ${results.passed ? 'bg-gradient-to-r from-green-600 to-emerald-600' : 'bg-gradient-to-r from-red-600 to-rose-600'}`}>
                 {/* Background Pattern */}
                 <div className="absolute inset-0 opacity-10">
                   <div className="absolute inset-0 bg-white/20 rounded-full blur-3xl transform scale-150"></div>
@@ -264,28 +264,28 @@ export default function SubTopicTestPage() {
 
                 <div className="relative z-10">
                   {/* Result Icon */}
-                  <div className={`w-24 h-24 mx-auto mb-6 rounded-full flex items-center justify-center shadow-2xl ${results.passed ? 'bg-white/20 backdrop-blur-sm' : 'bg-white/20 backdrop-blur-sm'}`}>
+                  <div className={`w-20 h-20 mx-auto mb-4 rounded-full flex items-center justify-center shadow-2xl ${results.passed ? 'bg-white/20 backdrop-blur-sm' : 'bg-white/20 backdrop-blur-sm'}`}>
                     {results.passed ? (
-                      <Trophy className="h-12 w-12 text-white" />
+                      <Trophy className="h-10 w-10 text-white" />
                     ) : (
-                      <Target className="h-12 w-12 text-white" />
+                      <Target className="h-10 w-10 text-white" />
                     )}
                   </div>
 
                   {/* Result Title */}
-                  <h1 className="text-4xl font-bold text-white mb-2">
+                  <h1 className="text-3xl font-bold text-white mb-2">
                     {results.passed ? '🎉 Congratulations!' : 'Keep Trying!'}
                   </h1>
-                  <p className="text-xl text-white/90 mb-4">
+                  <p className="text-lg text-white/90 mb-3">
                     {results.passed ? 'You Passed the Test!' : 'Test Not Passed'}
                   </p>
 
                   {/* Score Display */}
-                  <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-6 inline-block">
-                    <div className="text-5xl font-bold text-white mb-1">
+                  <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 inline-block">
+                    <div className="text-4xl font-bold text-white mb-1">
                       {results.score}%
                     </div>
-                    <div className="text-white/80">
+                    <div className="text-white/80 text-sm">
                       {Math.round((results.score / 100) * questions.length)}/{questions.length} Correct Answers
                     </div>
                   </div>
@@ -293,31 +293,31 @@ export default function SubTopicTestPage() {
               </div>
 
               {/* Content Section */}
-              <CardContent className="p-8">
-                <div className="space-y-8">
+              <CardContent className="p-4">
+                <div className="space-y-4">
                   {/* Statistics Grid */}
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="bg-card rounded-xl p-6 text-center border shadow-sm">
-                      <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <FileText className="h-6 w-6 text-primary" />
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="bg-card rounded-xl p-4 text-center border shadow-sm">
+                      <div className="w-10 h-10 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <FileText className="h-5 w-5 text-primary" />
                       </div>
-                      <div className="text-2xl font-bold text-primary mb-1">{questions.length}</div>
+                      <div className="text-xl font-bold text-primary mb-1">{questions.length}</div>
                       <div className="text-sm text-muted-foreground">Total Questions</div>
                     </div>
 
-                    <div className="bg-card rounded-xl p-6 text-center border shadow-sm">
-                      <div className="w-12 h-12 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-3">
-                        <Target className="h-6 w-6 text-blue-600" />
+                    <div className="bg-card rounded-xl p-4 text-center border shadow-sm">
+                      <div className="w-10 h-10 bg-blue-500/10 rounded-full flex items-center justify-center mx-auto mb-2">
+                        <Target className="h-5 w-5 text-blue-600" />
                       </div>
-                      <div className="text-2xl font-bold text-blue-600 mb-1">{subTopicTest.passingScore}%</div>
+                      <div className="text-xl font-bold text-blue-600 mb-1">{subTopicTest.passingScore}%</div>
                       <div className="text-sm text-muted-foreground">Passing Score</div>
                     </div>
 
-                    <div className={`rounded-xl p-6 text-center border-2 shadow-sm ${results.passed ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'}`}>
-                      <div className={`w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-3 ${results.passed ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
-                        <TrendingUp className="h-6 w-6" />
+                    <div className={`rounded-xl p-4 text-center border-2 shadow-sm ${results.passed ? 'bg-green-50 border-green-200 dark:bg-green-950 dark:border-green-800' : 'bg-red-50 border-red-200 dark:bg-red-950 dark:border-red-800'}`}>
+                      <div className={`w-10 h-10 rounded-full flex items-center justify-center mx-auto mb-2 ${results.passed ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'}`}>
+                        <TrendingUp className="h-5 w-5" />
                       </div>
-                      <div className={`text-2xl font-bold mb-1 ${results.passed ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
+                      <div className={`text-xl font-bold mb-1 ${results.passed ? 'text-green-700 dark:text-green-300' : 'text-red-700 dark:text-red-300'}`}>
                         {results.passed ? 'PASSED' : 'FAILED'}
                       </div>
                       <div className="text-sm text-muted-foreground">Final Result</div>
@@ -413,7 +413,7 @@ export default function SubTopicTestPage() {
                   </Alert>
 
                   {/* Action Buttons */}
-                  <div className="flex flex-col sm:flex-row gap-4 pt-4">
+                  <div className="flex flex-col sm:flex-row gap-3 pt-2">
                     {!results.passed && (
                       <Button
                         onClick={retakeTest}
@@ -462,7 +462,7 @@ export default function SubTopicTestPage() {
               <CardDescription>{subTopicTest.description}</CardDescription>
             </CardHeader>
 
-            <CardContent className="p-8 space-y-6">
+            <CardContent className="p-4 space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="bg-muted/50 rounded-lg p-4 text-center border">
                   <div className="text-2xl font-bold text-primary mb-1">{subTopicTest.totalQuestions}</div>
@@ -502,7 +502,7 @@ export default function SubTopicTestPage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto p-6">
+      <div className="max-w-2xl mx-auto p-6">
         {/* Test Header */}
         <div className="mb-8">
           <div className="flex justify-between items-center mb-6">
@@ -549,9 +549,9 @@ export default function SubTopicTestPage() {
           </CardHeader>
 
           <CardContent className="p-8">
-            <div className="space-y-8">
+            <div className="space-y-6">
               {/* Question Text */}
-              <div className="bg-muted/50 rounded-lg p-6 border">
+              <div className="bg-muted/50 rounded-lg p-3 border">
                 <h2 className="text-xl font-semibold leading-relaxed">
                   {currentQ.question}
                 </h2>
@@ -566,7 +566,7 @@ export default function SubTopicTestPage() {
                   className="space-y-3"
                 >
                   {currentQ.options.map((option, index) => (
-                    <div key={option.id} className="flex items-center gap-4 p-4 rounded-lg border-2 border-border bg-card hover:bg-muted/50 hover:border-primary cursor-pointer transition-all duration-200 data-[state=checked]:border-primary data-[state=checked]:bg-primary/5 data-[state=checked]:shadow-sm">
+                    <div key={option.id} className="flex items-center gap-4 p-2 rounded-lg border-2 border-border bg-card hover:bg-muted/50 hover:border-primary cursor-pointer transition-all duration-200 data-[state=checked]:border-primary data-[state=checked]:bg-primary/5 data-[state=checked]:shadow-sm">
                       <RadioGroupItem
                         value={option.id}
                         id={option.id}
