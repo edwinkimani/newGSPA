@@ -184,26 +184,26 @@ export default function ModulesPage() {
 
       <main className="flex-1">
         {/* Hero Section */}
-        <section className="bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 text-white py-24">
+  <section className="bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 text-white py-24" aria-label="Modules hero section">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center">
-              <h1 className="text-4xl lg:text-6xl font-bold mb-6">
+              <h1 className="text-4xl lg:text-6xl font-bold mb-6" tabIndex={0} aria-label="Professional Training Modules">
                 Professional Training Modules
               </h1>
-              <p className="text-xl lg:text-2xl text-blue-100 max-w-3xl mx-auto mb-8">
+              <p className="text-xl lg:text-2xl text-blue-100 max-w-3xl mx-auto mb-8" tabIndex={0}>
                 Expand your cybersecurity expertise with our comprehensive training modules.
                 Learn from industry experts and earn recognized certifications.
               </p>
               <div className="flex flex-wrap justify-center gap-4 text-sm">
-                <div className="flex items-center gap-2 bg-white/10 rounded-full px-4 py-2">
+                <div className="flex items-center gap-2 bg-white/10 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" tabIndex={0} aria-label="Expert-Led Courses">
                   <BookOpen className="h-4 w-4" />
                   <span>Expert-Led Courses</span>
                 </div>
-                <div className="flex items-center gap-2 bg-white/10 rounded-full px-4 py-2">
+                <div className="flex items-center gap-2 bg-white/10 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" tabIndex={0} aria-label="Industry Certifications">
                   <Award className="h-4 w-4" />
                   <span>Industry Certifications</span>
                 </div>
-                <div className="flex items-center gap-2 bg-white/10 rounded-full px-4 py-2">
+                <div className="flex items-center gap-2 bg-white/10 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-400" tabIndex={0} aria-label="Practical Learning">
                   <Star className="h-4 w-4" />
                   <span>Practical Learning</span>
                 </div>
@@ -213,7 +213,7 @@ export default function ModulesPage() {
         </section>
 
         {/* Filters Section */}
-        <section className="py-8 bg-muted/30 border-b">
+  <section className="py-8 bg-muted/30 border-b" aria-label="Module filters">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
               <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
@@ -223,11 +223,12 @@ export default function ModulesPage() {
                     placeholder="Search modules..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="pl-10"
+                    className="pl-10 focus:ring-2 focus:ring-blue-400"
+                    aria-label="Search modules"
                   />
                 </div>
                 <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                  <SelectTrigger className="w-full sm:w-48">
+                  <SelectTrigger className="w-full sm:w-48 focus:ring-2 focus:ring-blue-400" aria-label="Filter by category">
                     <SelectValue placeholder="All Categories" />
                   </SelectTrigger>
                   <SelectContent>
@@ -238,7 +239,7 @@ export default function ModulesPage() {
                   </SelectContent>
                 </Select>
                 <Select value={difficultyFilter} onValueChange={setDifficultyFilter}>
-                  <SelectTrigger className="w-full sm:w-48">
+                  <SelectTrigger className="w-full sm:w-48 focus:ring-2 focus:ring-blue-400" aria-label="Filter by difficulty">
                     <SelectValue placeholder="All Levels" />
                   </SelectTrigger>
                   <SelectContent>
@@ -257,7 +258,7 @@ export default function ModulesPage() {
         </section>
 
         {/* Modules Grid */}
-        <section className="py-12">
+  <section className="py-12" aria-label="Modules grid">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             {filteredModules.length === 0 ? (
               <div className="text-center py-12">
@@ -266,9 +267,14 @@ export default function ModulesPage() {
                 <p className="text-muted-foreground">Try adjusting your search or filter criteria.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
                 {filteredModules.map((module) => (
-                  <Card key={module.id} className="group hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border-0 bg-card/80 backdrop-blur-sm overflow-hidden">
+                  <Card
+                    key={module.id}
+                    className="group hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border-0 bg-card/80 backdrop-blur-sm overflow-hidden focus-within:ring-4 focus-within:ring-blue-400"
+                    tabIndex={0}
+                    aria-label={module.title}
+                  >
                     <CardHeader className="pb-4">
                       <div className="flex items-start justify-between mb-3">
                         <Badge className={getDifficultyColor(module.difficulty)}>
@@ -311,11 +317,16 @@ export default function ModulesPage() {
                       <div className="flex gap-2 pt-2">
                         <Dialog>
                           <DialogTrigger asChild>
-                            <Button variant="outline" className="flex-1" onClick={() => setSelectedModule(module)}>
+                            <Button
+                              variant="outline"
+                              className="flex-1 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                              onClick={() => setSelectedModule(module)}
+                              aria-label={`View details for ${module.title}`}
+                            >
                               View Details
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+                          <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto" aria-label={`Details for ${module.title}`}> 
                             <DialogHeader>
                               <DialogTitle className="text-2xl">{module.title}</DialogTitle>
                               <DialogDescription className="text-base">
@@ -372,7 +383,11 @@ export default function ModulesPage() {
                                       Already Enrolled
                                     </Badge>
                                   ) : (
-                                    <Button onClick={() => handleEnroll(module)} className="px-6">
+                                    <Button
+                                      onClick={() => handleEnroll(module)}
+                                      className="px-6 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                                      aria-label={`Enroll in ${module.title}`}
+                                    >
                                       Enroll Now
                                     </Button>
                                   )}
@@ -383,13 +398,22 @@ export default function ModulesPage() {
                         </Dialog>
 
                         {!module.is_enrolled && (
-                          <Button onClick={() => handleEnroll(module)} className="flex-1">
+                          <Button
+                            onClick={() => handleEnroll(module)}
+                            className="flex-1 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            aria-label={`Enroll in ${module.title}`}
+                          >
                             Enroll
                           </Button>
                         )}
 
                         {module.is_enrolled && module.enrollment_status === 'completed' && (
-                          <Button asChild variant="outline" className="flex-1">
+                          <Button
+                            asChild
+                            variant="outline"
+                            className="flex-1 focus:outline-none focus:ring-2 focus:ring-blue-400"
+                            aria-label={`Continue learning ${module.title}`}
+                          >
                             <Link href={`/dashboard/my-modules/${module.id}`}>
                               Continue Learning
                             </Link>

@@ -14,13 +14,13 @@ import { motion } from "framer-motion"
 export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-background via-muted/20 to-background">
-      <Navigation />
-      <AdminSetupNotice />
-      <UserAdvertisement />
+  <Navigation />
+  <AdminSetupNotice />
+  <UserAdvertisement />
 
       <main id="main-content" className="flex-1">
         {/* Enhanced Hero Section */}
-        <section className="relative py-24 lg:py-36 bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 overflow-hidden">
+  <section className="relative py-24 lg:py-36 bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 overflow-hidden" aria-label="Hero section">
           {/* Background decorative elements */}
           <div className="absolute inset-0">
             <div className="absolute top-0 left-0 w-72 h-72 bg-blue-500/10 rounded-full blur-3xl"></div>
@@ -42,7 +42,7 @@ export default function HomePage() {
                   animate={{ scale: 1 }}
                   transition={{ delay: 0.2, duration: 0.5, type: "spring", stiffness: 200 }}
                 >
-                  <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-6">
+                  <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-yellow-400" tabIndex={0} aria-label="Global Security Certification badge">
                     <Zap className="h-4 w-4 text-yellow-400" />
                     <span className="text-sm text-white/80">Global Security Certification</span>
                   </div>
@@ -105,12 +105,23 @@ export default function HomePage() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: 1.2, duration: 0.8 }}
                 >
-                  <Button size="lg" className="text-lg px-8 py-6 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700" asChild>
+                  <Button
+                    size="lg"
+                    className="text-lg px-8 py-6 shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 focus:outline-none focus:ring-4 focus:ring-blue-400"
+                    asChild
+                    aria-label="Start Certification"
+                  >
                     <Link href="/register">
                       Start Certification <ArrowRight className="ml-2 h-6 w-6" />
                     </Link>
                   </Button>
-                  <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-2 border-white/20 text-white hover:bg-white/10 backdrop-blur-sm transition-all duration-300" asChild>
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="text-lg px-8 py-6 border-2 border-white/20 text-white hover:bg-white/10 backdrop-blur-sm transition-all duration-300 focus:outline-none focus:ring-4 focus:ring-blue-200"
+                    asChild
+                    aria-label="Learn More About GSPA"
+                  >
                     <Link href="/about">Learn More</Link>
                   </Button>
                 </motion.div>
@@ -161,11 +172,12 @@ export default function HomePage() {
                 <div className="flex justify-center mb-6">
                   <img
                     src="/Global-Security-Practitioners-Alliance.png"
-                    alt="GSPA Logo"
-                    className="h-20 w-auto brightness-0 invert"
+                    alt="Global Security Practitioners Alliance logo"
+                    className="h-20 w-auto brightness-0 invert focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    tabIndex={0}
                   />
                 </div>
-                <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm text-white px-6 py-3 rounded-full text-sm font-semibold shadow-lg border border-white/30">
+                <div className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm text-white px-6 py-3 rounded-full text-sm font-semibold shadow-lg border border-white/30 focus:outline-none focus:ring-2 focus:ring-blue-400" tabIndex={0} aria-label="Global Accreditation Authority">
                   <Shield className="h-5 w-5" />
                   Global Accreditation Authority
                 </div>
@@ -179,7 +191,12 @@ export default function HomePage() {
                   </p>
                 </div>
                 <div className="pt-4">
-                  <Button size="lg" asChild className="bg-white text-blue-600 hover:bg-blue-50 text-lg px-10 py-6 shadow-2xl hover:shadow-3xl hover:scale-105 transition-all duration-300 font-semibold rounded-xl">
+                  <Button
+                    size="lg"
+                    asChild
+                    className="bg-white text-blue-600 hover:bg-blue-50 text-lg px-10 py-6 shadow-2xl hover:shadow-3xl hover:scale-105 transition-all duration-300 font-semibold rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-400"
+                    aria-label="Start Accreditation Process"
+                  >
                     <Link href="/register">
                       Start Accreditation Process <ArrowRight className="ml-2 h-6 w-6" />
                     </Link>
@@ -194,8 +211,8 @@ export default function HomePage() {
         <section className="py-24 bg-gradient-to-b from-background to-muted/20 relative overflow-hidden">
           <div className="absolute inset-0 bg-gradient-to-r from-blue-500/5 via-transparent to-purple-500/5"></div>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-            <div className="text-center mb-20">
-              <div className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-semibold px-4 py-2 rounded-full mb-4">
+            <div className="text-center mb-20 px-2 sm:px-0">
+              <div className="inline-block bg-gradient-to-r from-blue-600 to-purple-600 text-white text-sm font-semibold px-4 py-2 rounded-full mb-4 focus:outline-none focus:ring-2 focus:ring-purple-400" tabIndex={0} aria-label="Why Choose GSPA">
                 Why Choose GSPA?
               </div>
               <h2 className="text-4xl lg:text-5xl font-bold text-balance mb-6 bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
@@ -250,7 +267,7 @@ export default function HomePage() {
                   transition={{ duration: 0.6, delay: index * 0.1 }}
                   viewport={{ once: true }}
                 >
-                  <Card className="text-center group hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border-0 bg-card/80 backdrop-blur-sm overflow-hidden">
+                  <Card className="text-center group hover:shadow-2xl hover:-translate-y-2 transition-all duration-300 border-0 bg-card/80 backdrop-blur-sm overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label={feature.title}>
                     <div className={`absolute inset-0 bg-gradient-to-br ${feature.color} opacity-5 group-hover:opacity-10 transition-opacity duration-300`}></div>
                     <CardHeader className="pb-6 relative z-10">
                       <div className="relative mx-auto mb-6">
@@ -278,8 +295,8 @@ export default function HomePage() {
         {/* Enhanced Process Section */}
         <section className="py-24 bg-background relative overflow-hidden">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 relative">
-            <div className="text-center mb-20">
-              <div className="inline-block bg-gradient-to-r from-green-600 to-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-full mb-4">
+            <div className="text-center mb-20 px-2 sm:px-0">
+              <div className="inline-block bg-gradient-to-r from-green-600 to-blue-600 text-white text-sm font-semibold px-4 py-2 rounded-full mb-4 focus:outline-none focus:ring-2 focus:ring-green-400" tabIndex={0} aria-label="Simple 4-Step Process">
                 Simple 4-Step Process
               </div>
               <h2 className="text-4xl lg:text-5xl font-bold text-balance mb-6 bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
@@ -300,7 +317,7 @@ export default function HomePage() {
                   { step: 3, icon: BookOpen, title: "Take Test", description: "Complete the security aptitude assessment", color: "from-green-500 to-green-600" },
                   { step: 4, icon: Award, title: "Get Certified", description: "Receive your official certificate upon passing", color: "from-orange-500 to-orange-600" }
                 ].map((item, index) => (
-                  <div key={index} className="text-center group">
+                  <div key={index} className="text-center group focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label={item.title}>
                     <div className="relative mb-8">
                       <div className={`absolute -inset-4 bg-gradient-to-r ${item.color} rounded-full blur-xl group-hover:blur-2xl transition-all duration-300 opacity-20`}></div>
                       <div className={`relative w-24 h-24 bg-gradient-to-br ${item.color} text-white rounded-full flex items-center justify-center text-2xl font-bold shadow-2xl group-hover:scale-110 transition-transform duration-300`}>
@@ -327,7 +344,7 @@ export default function HomePage() {
                 { step: 3, icon: BookOpen, title: "Take Test", description: "Complete the security aptitude assessment", color: "from-green-500 to-green-600" },
                 { step: 4, icon: Award, title: "Get Certified", description: "Receive your official certificate upon passing", color: "from-orange-500 to-orange-600" }
               ].map((item, index) => (
-                <div key={index} className="flex items-center gap-6 p-6 bg-gradient-to-r from-muted to-background rounded-2xl border border-border shadow-lg">
+                <div key={index} className="flex items-center gap-6 p-6 bg-gradient-to-r from-muted to-background rounded-2xl border border-border shadow-lg focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label={item.title}>
                   <div className="flex-shrink-0">
                     <div className={`w-16 h-16 bg-gradient-to-br ${item.color} text-white rounded-full flex items-center justify-center text-lg font-bold shadow-lg`}>
                       {item.step}
@@ -349,7 +366,7 @@ export default function HomePage() {
         </section>
 
         {/* Enhanced CTA Section */}
-        <section className="py-24 bg-gradient-to-r from-slate-900 via-blue-900 to-purple-900 relative overflow-hidden">
+  <section className="py-24 bg-gradient-to-r from-slate-900 via-blue-900 to-purple-900 relative overflow-hidden" aria-label="Call to action">
           <div className="absolute inset-0">
             <div className="absolute top-0 left-0 w-64 h-64 bg-blue-500/10 rounded-full blur-3xl"></div>
             <div className="absolute bottom-0 right-0 w-64 h-64 bg-purple-500/10 rounded-full blur-3xl"></div>
@@ -361,11 +378,12 @@ export default function HomePage() {
                 <div className="flex justify-center lg:justify-start mb-6">
                   <img
                     src="/Global-Security-Practitioners-Alliance.png"
-                    alt="GSPA Logo"
-                    className="h-20 w-auto brightness-0 invert"
+                    alt="Global Security Practitioners Alliance logo"
+                    className="h-20 w-auto brightness-0 invert focus:outline-none focus:ring-2 focus:ring-blue-400"
+                    tabIndex={0}
                   />
                 </div>
-                <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm font-medium border border-white/20">
+                <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm text-white px-4 py-2 rounded-full text-sm font-medium border border-white/20 focus:outline-none focus:ring-2 focus:ring-blue-400" tabIndex={0} aria-label="Ready to Transform Your Career?">
                   <Rocket className="h-4 w-4" />
                   Ready to Transform Your Career?
                 </div>
@@ -389,10 +407,20 @@ export default function HomePage() {
                   </div>
                 </div>
                 <div className="pt-4 flex flex-col sm:flex-row gap-4">
-                  <Button size="lg" asChild className="bg-white text-blue-600 hover:bg-blue-50 text-lg px-8 py-6 shadow-2xl hover:shadow-3xl hover:scale-105 transition-all duration-300 font-semibold rounded-xl">
+                  <Button
+                    size="lg"
+                    asChild
+                    className="bg-white text-blue-600 hover:bg-blue-50 text-lg px-8 py-6 shadow-2xl hover:shadow-3xl hover:scale-105 transition-all duration-300 font-semibold rounded-xl focus:outline-none focus:ring-4 focus:ring-blue-400"
+                    aria-label="Start Certification Now"
+                  >
                     <Link href="/register">Start Certification Now</Link>
                   </Button>
-                  <Button size="lg" variant="outline" className="border-white text-white hover:bg-white/10 text-lg px-8 py-6 rounded-xl backdrop-blur-sm">
+                  <Button
+                    size="lg"
+                    variant="outline"
+                    className="border-white text-white hover:bg-white/10 text-lg px-8 py-6 rounded-xl backdrop-blur-sm focus:outline-none focus:ring-4 focus:ring-blue-200"
+                    aria-label="Download Brochure"
+                  >
                     Download Brochure
                   </Button>
                 </div>

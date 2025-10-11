@@ -3,7 +3,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Shield, Menu, X, LogOut } from "lucide-react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { ThemeToggle } from "@/components/theme-toggle"
 import { useUser } from "@/components/user-context"
 import { useRouter } from "next/navigation"
@@ -14,6 +14,18 @@ export default function Navigation() {
   const [isScrolled, setIsScrolled] = useState(false)
   const { role, logout } = useUser()
   const router = useRouter()
+  const mobileMenuRef = useRef<HTMLDivElement>(null)
+  // Close mobile menu on outside click
+  useEffect(() => {
+    if (!isMenuOpen) return
+    function handleClick(e: MouseEvent) {
+      if (mobileMenuRef.current && !mobileMenuRef.current.contains(e.target as Node)) {
+        setIsMenuOpen(false)
+      }
+    }
+    document.addEventListener("mousedown", handleClick)
+    return () => document.removeEventListener("mousedown", handleClick)
+  }, [isMenuOpen])
 
   const dashboardHref = role === 'admin' ? '/admin/master-dashboard' : role === 'master_practitioner' ? '/master-practitioner' : '/practitioner'
 
@@ -147,47 +159,59 @@ export default function Navigation() {
           </Button>
         </div>
 
+        {/* Mobile menu backdrop */}
+        {isMenuOpen && (
+          <div className="fixed top-0 left-0 right-0 bottom-0 h-full w-full z-40 bg-black/30 backdrop-blur-sm md:hidden" aria-hidden="true"></div>
+        )}
         <div
           id="mobile-menu"
-          className={`md:hidden transition-all duration-300 ease-in-out ${
+          ref={mobileMenuRef}
+          className={`md:hidden fixed left-0 right-0 top-16 z-[60] transition-all duration-300 ease-in-out ${
             isMenuOpen
-              ? "max-h-96 opacity-100 py-4 border-t border-primary-600"
-              : "max-h-0 opacity-0 py-0 overflow-hidden"
-          }`}
+              ? "max-h-[32rem] opacity-100 py-4 border-t border-primary-600 pointer-events-auto"
+              : "max-h-0 opacity-0 py-0 overflow-hidden pointer-events-none"
+          } bg-gradient-to-br from-slate-900 via-blue-900 to-purple-900 border-b border-primary-600 shadow-2xl text-primary-foreground`}
         >
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2 px-2">
+            <div className="flex justify-end mb-2">
+              <ThemeToggle />
+            </div>
             {navItems.map((item, index) => (
               <Link
                 key={item.href}
                 href={item.href}
-                className={`text-sm font-medium transition-all duration-200 py-2 px-3 rounded-lg ${
-                  pathname === item.href
+                className={`text-base font-medium transition-all duration-200 py-3 px-4 rounded-lg min-h-[44px] flex items-center 
+                  ${pathname === item.href
                     ? "text-accent font-semibold bg-primary-foreground/10"
-                    : `${isScrolled ? "text-foreground/80 hover:text-primary hover:bg-muted/50" : "text-primary-foreground/80 hover:text-accent hover:bg-primary-foreground/5"}`
-                }`}
+                    : "text-black dark:text-white hover:text-accent hover:bg-primary-foreground/10"}
+                `}
                 style={{ animationDelay: `${index * 50}ms` }}
                 onClick={() => setIsMenuOpen(false)}
+                tabIndex={isMenuOpen ? 0 : -1}
+                role="menuitem"
+                aria-label={item.label}
               >
                 {item.label}
               </Link>
             ))}
 
-            <div className="border-t border-primary-600 pt-4 mt-2">
+            <div className="border-t border-primary-600 pt-4 mt-2 flex flex-col gap-2">
               {role ? (
                 <>
                   <Button
                     variant="ghost"
                     asChild
-                    className={`w-full justify-start ${isScrolled ? "hover:bg-muted hover:text-primary" : "hover:bg-primary-foreground/10 hover:text-accent"}`}
+                    className={`w-full justify-start min-h-[44px] text-base ${isScrolled ? "hover:bg-muted hover:text-primary" : "hover:bg-primary-foreground/10 hover:text-accent"}`}
                   >
-                    <Link href={dashboardHref} onClick={() => setIsMenuOpen(false)}>
+                    <Link href={dashboardHref} onClick={() => setIsMenuOpen(false)} aria-label="My Dashboard">
                       My Dashboard
                     </Link>
                   </Button>
                   <Button
                     variant="ghost"
                     onClick={() => { handleLogout(); setIsMenuOpen(false) }}
-                    className={`w-full justify-start mt-2 ${isScrolled ? "hover:bg-muted hover:text-primary" : "hover:bg-primary-foreground/10 hover:text-accent"}`}
+                    className={`w-full justify-start mt-2 min-h-[44px] text-base ${isScrolled ? "hover:bg-muted hover:text-primary" : "hover:bg-primary-foreground/10 hover:text-accent"}`}
+                    aria-label="Logout"
                   >
                     <LogOut className="h-4 w-4 mr-2" />
                     Logout
@@ -198,17 +222,17 @@ export default function Navigation() {
                   <Button
                     variant="ghost"
                     asChild
-                    className={`w-full justify-start ${isScrolled ? "hover:bg-muted hover:text-primary" : "hover:bg-primary-foreground/10 hover:text-accent"}`}
+                    className={`w-full justify-start min-h-[44px] text-base text-black dark:text-white ${isScrolled ? "hover:bg-muted hover:text-primary" : "hover:bg-primary-foreground/10 hover:text-accent"}`}
                   >
-                    <Link href="/auth/login" onClick={() => setIsMenuOpen(false)}>
+                    <Link href="/auth/login" onClick={() => setIsMenuOpen(false)} aria-label="Login">
                       Login
                     </Link>
                   </Button>
                   <Button
                     asChild
-                    className="w-full justify-start bg-gradient-to-r from-accent to-secondary hover:from-accent/90 hover:to-secondary/90 text-primary font-semibold mt-2"
+                    className="w-full justify-start bg-gradient-to-r from-accent to-secondary hover:from-accent/90 hover:to-secondary/90 text-primary font-semibold mt-2 min-h-[44px] text-base"
                   >
-                    <Link href="/register" onClick={() => setIsMenuOpen(false)}>
+                    <Link href="/register" onClick={() => setIsMenuOpen(false)} aria-label="Join GSPA">
                       Join GSPA
                     </Link>
                   </Button>

@@ -22,30 +22,30 @@ export default function WhyJoinPage() {
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-4xl mx-auto">
-              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-6">
+              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-yellow-400" tabIndex={0} aria-label="Join 50,000+ Certified Professionals">
                 <Zap className="h-4 w-4 text-yellow-400" />
                 <span className="text-sm text-white/80">Join 50,000+ Certified Professionals</span>
               </div>
 
-              <h1 className="text-5xl lg:text-7xl font-bold text-white mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+              <h1 className="text-5xl lg:text-7xl font-bold text-white mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent" tabIndex={0} aria-label="Why Join GSPA?">
                 Why Join GSPA?
               </h1>
-              <p className="text-xl text-blue-100 text-pretty mb-8 leading-relaxed max-w-3xl mx-auto">
+              <p className="text-xl text-blue-100 text-pretty mb-8 leading-relaxed max-w-3xl mx-auto" tabIndex={0}>
                 Unlock your potential with globally recognized security certification. Join a community of elite
                 professionals and accelerate your career growth with industry-leading credentials.
               </p>
 
               {/* Quick Stats */}
               <div className="grid grid-cols-3 gap-8 max-w-2xl mx-auto mt-12">
-                <div className="text-center">
+                <div className="text-center" tabIndex={0} aria-label="50K+ Members">
                   <div className="text-3xl font-bold text-white mb-2">50K+</div>
                   <div className="text-blue-200 text-sm">Members</div>
                 </div>
-                <div className="text-center">
+                <div className="text-center" tabIndex={0} aria-label="120+ Countries">
                   <div className="text-3xl font-bold text-white mb-2">120+</div>
                   <div className="text-blue-200 text-sm">Countries</div>
                 </div>
-                <div className="text-center">
+                <div className="text-center" tabIndex={0} aria-label="25% Salary Boost">
                   <div className="text-3xl font-bold text-white mb-2">25%</div>
                   <div className="text-blue-200 text-sm">Salary Boost</div>
                 </div>
@@ -114,7 +114,7 @@ export default function WhyJoinPage() {
                   bg: "bg-secondary/10"
                 }
               ].map((benefit, index) => (
-                <Card key={index} className="relative border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 group overflow-hidden">
+                <Card key={index} className="relative border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 group overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label={benefit.title}>
                   <div className={`absolute inset-0 bg-gradient-to-br ${benefit.color} opacity-5 group-hover:opacity-10 transition-opacity duration-300`}></div>
                   <CardHeader className="relative z-10">
                     <div className={`inline-flex p-3 rounded-2xl ${benefit.bg} mb-4 group-hover:scale-110 transition-transform duration-300`}>
@@ -174,7 +174,7 @@ export default function WhyJoinPage() {
                       description: "Discounts on security tools, software, and exclusive partner offers"
                     }
                   ].map((item, index) => (
-                    <div key={index} className="flex items-start gap-4 p-4 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/50 hover:bg-card transition-all duration-300 group">
+                    <div key={index} className="flex items-start gap-4 p-4 rounded-2xl bg-card/50 backdrop-blur-sm border border-border/50 hover:bg-card transition-all duration-300 group focus:outline-none focus:ring-2 focus:ring-blue-400" tabIndex={0} aria-label={item.title}>
                       <div className="bg-gradient-to-r from-primary to-accent p-3 rounded-xl group-hover:scale-110 transition-transform duration-300">
                         <item.icon className="h-6 w-6 text-primary-foreground" />
                       </div>
@@ -190,7 +190,7 @@ export default function WhyJoinPage() {
               {/* Enhanced Stats Card */}
               <div className="relative">
                 <div className="absolute -inset-4 bg-gradient-to-r from-primary to-accent rounded-3xl blur-lg opacity-20"></div>
-                <Card className="relative bg-card/80 backdrop-blur-sm border-0 shadow-2xl rounded-2xl overflow-hidden">
+                <Card className="relative bg-card/80 backdrop-blur-sm border-0 shadow-2xl rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label="Certification Success Metrics">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
                   <CardHeader className="text-center pb-4">
                     <CardTitle className="text-2xl bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
@@ -229,7 +229,7 @@ export default function WhyJoinPage() {
         <section className="py-20 bg-background">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
-              <div className="inline-block bg-gradient-to-r from-destructive to-orange-600 text-destructive-foreground text-sm font-semibold px-4 py-2 rounded-full mb-4">
+              <div className="inline-block bg-gradient-to-r from-destructive to-orange-600 text-destructive-foreground text-sm font-semibold px-4 py-2 rounded-full mb-4 focus:outline-none focus:ring-2 focus:ring-orange-400" tabIndex={0} aria-label="Industry Comparison">
                 Industry Comparison
               </div>
               <h2 className="text-4xl lg:text-5xl font-bold text-balance mb-4 bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
@@ -309,23 +309,23 @@ export default function WhyJoinPage() {
             <div className="absolute bottom-0 right-0 w-64 h-64 bg-primary-foreground/10 rounded-full blur-3xl"></div>
           </div>
 
-          <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
-            <h2 className="text-4xl lg:text-5xl font-bold text-primary-foreground mb-4">Ready to Transform Your Career?</h2>
-            <p className="text-xl text-primary-foreground/90 text-pretty max-w-2xl mx-auto mb-8 leading-relaxed">
+            <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <h2 className="text-4xl lg:text-5xl font-bold text-primary-foreground mb-4" tabIndex={0} aria-label="Ready to Transform Your Career?">Ready to Transform Your Career?</h2>
+            <p className="text-xl text-primary-foreground/90 text-pretty max-w-2xl mx-auto mb-8 leading-relaxed" tabIndex={0}>
               Join thousands of security professionals who have accelerated their careers with GSPA certification.
               Your journey to global recognition starts here.
             </p>
             <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-              <Button size="lg" variant="secondary" className="rounded-xl px-8 py-3 text-lg font-semibold shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105" asChild>
+              <Button size="lg" variant="secondary" className="rounded-xl px-8 py-3 text-lg font-semibold shadow-2xl hover:shadow-3xl transition-all duration-300 hover:scale-105 focus:outline-none focus:ring-4 focus:ring-blue-400" asChild aria-label="Start Your Registration">
                 <Link href="/register">
                   Start Your Registration <ArrowRight className="ml-2 h-5 w-5" />
                 </Link>
               </Button>
-              <Button size="lg" variant="outline" className="rounded-xl px-8 py-3 text-lg font-semibold border-primary-foreground text-primary-foreground hover:bg-primary-foreground/10 backdrop-blur-sm">
+              <Button size="lg" variant="outline" className="rounded-xl px-8 py-3 text-lg font-semibold border-primary-foreground text-primary-foreground hover:bg-primary-foreground/10 backdrop-blur-sm focus:outline-none focus:ring-4 focus:ring-blue-200" aria-label="Download Brochure">
                 Download Brochure
               </Button>
             </div>
-            <p className="text-primary-foreground/80 text-sm mt-6">No commitment required. Get started in 5 minutes.</p>
+            <p className="text-primary-foreground/80 text-sm mt-6" tabIndex={0}>No commitment required. Get started in 5 minutes.</p>
           </div>
         </section>
       </main>

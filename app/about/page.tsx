@@ -59,30 +59,30 @@ export default function AboutPage() {
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-4xl mx-auto">
-              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-6">
+              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-yellow-400" tabIndex={0} aria-label="Leading Security Certification Since 2010">
                 <Shield className="h-4 w-4 text-yellow-400" />
                 <span className="text-sm text-white/80">Leading Security Certification Since 2010</span>
               </div>
 
-              <h1 className="text-5xl lg:text-7xl font-bold text-white mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+              <h1 className="text-5xl lg:text-7xl font-bold text-white mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent" tabIndex={0} aria-label="About GSPA">
                 About GSPA
               </h1>
-              <p className="text-xl text-blue-100 text-pretty mb-8 leading-relaxed max-w-3xl mx-auto">
+              <p className="text-xl text-blue-100 text-pretty mb-8 leading-relaxed max-w-3xl mx-auto" tabIndex={0}>
                 The Global Security Practitioners Alliance is dedicated to advancing security excellence through
                 professional certification, innovative training, and global community building.
               </p>
 
               {/* Quick Stats */}
               <div className="grid grid-cols-3 gap-8 max-w-2xl mx-auto mt-12">
-                <div className="text-center">
+                <div className="text-center" tabIndex={0} aria-label="50K+ Professionals">
                   <div className="text-3xl font-bold text-white mb-2">50K+</div>
                   <div className="text-blue-200 text-sm">Professionals</div>
                 </div>
-                <div className="text-center">
+                <div className="text-center" tabIndex={0} aria-label="120+ Countries">
                   <div className="text-3xl font-bold text-white mb-2">120+</div>
                   <div className="text-blue-200 text-sm">Countries</div>
                 </div>
-                <div className="text-center">
+                <div className="text-center" tabIndex={0} aria-label="14 Years">
                   <div className="text-3xl font-bold text-white mb-2">14</div>
                   <div className="text-blue-200 text-sm">Years</div>
                 </div>
@@ -97,7 +97,7 @@ export default function AboutPage() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               <div className="relative">
                 <div className="absolute -inset-4 bg-gradient-to-r from-primary to-accent rounded-3xl blur-lg opacity-20"></div>
-                <Card className="relative bg-card/80 backdrop-blur-sm border-0 shadow-2xl rounded-2xl overflow-hidden">
+                <Card className="relative bg-card/80 backdrop-blur-sm border-0 shadow-2xl rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label="Our Mission">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
                   <CardHeader className="pb-4">
                     <div className="flex items-center gap-3 mb-4">
@@ -121,7 +121,7 @@ export default function AboutPage() {
 
               <div className="relative">
                 <div className="absolute -inset-4 bg-gradient-to-r from-accent to-secondary rounded-3xl blur-lg opacity-20"></div>
-                <Card className="relative bg-card/80 backdrop-blur-sm border-0 shadow-2xl rounded-2xl overflow-hidden">
+                <Card className="relative bg-card/80 backdrop-blur-sm border-0 shadow-2xl rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label="Our Vision">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-accent to-secondary"></div>
                   <CardHeader className="pb-4">
                     <div className="flex items-center gap-3 mb-4">
@@ -194,7 +194,7 @@ export default function AboutPage() {
                   bg: "bg-primary/10",
                 },
               ].map((item, index) => (
-                <Card key={index} className="relative border-0 shadow-xl overflow-hidden">
+                <Card key={index} className="relative border-0 shadow-xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label={item.title}>
                   <div className={`absolute inset-0 bg-gradient-to-br ${item.color} opacity-5`}></div>
                   <CardHeader className="text-center relative z-10">
                     <div className={`inline-flex p-4 rounded-2xl ${item.bg} mb-4`}>
@@ -246,7 +246,7 @@ export default function AboutPage() {
                   color: "from-secondary to-primary",
                 },
               ].map((value, index) => (
-                <Card key={index} className="text-center border-0 shadow-xl">
+                <Card key={index} className="text-center border-0 shadow-xl focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label={value.title}>
                   <CardHeader>
                     <div className="bg-gradient-to-r from-muted to-background p-6 rounded-2xl mb-4">
                       <value.icon
@@ -320,7 +320,7 @@ export default function AboutPage() {
                   color: "from-secondary to-secondary/80",
                 },
               ].map((member, index) => (
-                <Card key={index} className="text-center border-0 shadow-xl overflow-hidden">
+                <Card key={index} className="text-center border-0 shadow-xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label={member.name}>
                   <div className={`absolute inset-0 bg-gradient-to-br ${member.color} opacity-5`}></div>
                   <CardHeader className="relative z-10">
                     <div className="relative mx-auto mb-4">
@@ -351,10 +351,10 @@ export default function AboutPage() {
         <section className="py-20 bg-slate-900 relative overflow-hidden">
           <div className="relative max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center mb-16">
-              <div className="inline-flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-full px-4 py-2 mb-6">
-                <Shield className="h-4 w-4 text-slate-400" />
-                <span className="text-sm text-slate-300">Our Journey Since 2010</span>
-              </div>
+              <div className="inline-flex items-center gap-2 bg-slate-800 border border-slate-700 rounded-full px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-blue-400" tabIndex={0} aria-label="Our Journey Since 2010">
+                  <Shield className="h-4 w-4 text-slate-400" />
+                  <span className="text-sm text-slate-300">Our Journey Since 2010</span>
+                </div>
               <h2 className="text-4xl lg:text-5xl font-bold text-white mb-4">Our Story</h2>
               <p className="text-xl text-slate-300 text-pretty max-w-2xl mx-auto">
                 Founded by security professionals, for security professionals. A legacy of excellence and innovation.

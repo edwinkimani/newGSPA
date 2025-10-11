@@ -67,8 +67,8 @@
     "jsonwebtoken": "latest",
     "jspdf": "latest",
     "lucide-react": "^0.454.0",
-    "next": "14.2.16",
-    "next-auth": "latest",
+    "next": "^14.2.33",
+    "next-auth": "^4.24.7",
     "next-themes": "latest",
     "nodemailer": "latest",
     "prisma": "latest",
@@ -99,9 +99,9 @@
     "postcss": "latest",
     "tailwindcss": "latest",
     "ts-node": "latest",
+    "tsx": "^4.0.0",
     "tw-animate-css": "latest",
-    "typescript": "latest",
-    "tsx": "^4.0.0"
+    "typescript": "latest"
   },
   "overrides": {
     "rimraf": "^4.0.0",

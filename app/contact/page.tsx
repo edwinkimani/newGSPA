@@ -148,30 +148,30 @@ export default function ContactPage() {
 
           <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="text-center max-w-4xl mx-auto">
-              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-6">
+              <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur-sm border border-white/20 rounded-full px-4 py-2 mb-6 focus:outline-none focus:ring-2 focus:ring-yellow-400" tabIndex={0} aria-label="We're here to help you succeed">
                 <Zap className="h-4 w-4 text-yellow-400" />
                 <span className="text-sm text-white/80">We're here to help you succeed</span>
               </div>
 
-              <h1 className="text-5xl lg:text-7xl font-bold text-white mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent">
+              <h1 className="text-5xl lg:text-7xl font-bold text-white mb-6 bg-gradient-to-r from-white to-blue-200 bg-clip-text text-transparent" tabIndex={0} aria-label="Let's Talk">
                 Let's Talk
               </h1>
-              <p className="text-xl text-blue-100 text-pretty mb-8 leading-relaxed max-w-3xl mx-auto">
+              <p className="text-xl text-blue-100 text-pretty mb-8 leading-relaxed max-w-3xl mx-auto" tabIndex={0}>
                 Ready to advance your security career? Our team is here to guide you through certification, answer your
                 questions, and help you achieve global recognition.
               </p>
 
               {/* Stats */}
               <div className="grid grid-cols-3 gap-8 max-w-2xl mx-auto mt-12">
-                <div className="text-center">
+                <div className="text-center" tabIndex={0} aria-label="24h Response Time">
                   <div className="text-3xl font-bold text-white mb-2">24h</div>
                   <div className="text-blue-200 text-sm">Response Time</div>
                 </div>
-                <div className="text-center">
+                <div className="text-center" tabIndex={0} aria-label="120+ Countries Served">
                   <div className="text-3xl font-bold text-white mb-2">120+</div>
                   <div className="text-blue-200 text-sm">Countries Served</div>
                 </div>
-                <div className="text-center">
+                <div className="text-center" tabIndex={0} aria-label="98% Satisfaction Rate">
                   <div className="text-3xl font-bold text-white mb-2">98%</div>
                   <div className="text-blue-200 text-sm">Satisfaction Rate</div>
                 </div>
@@ -187,7 +187,7 @@ export default function ContactPage() {
               {/* Enhanced Contact Form */}
               <div className="relative">
                 <div className="absolute -inset-4 bg-gradient-to-r from-primary to-accent rounded-3xl blur-lg opacity-20"></div>
-                <Card className="relative bg-card/80 backdrop-blur-sm border-0 shadow-2xl rounded-2xl overflow-hidden">
+                <Card className="relative bg-card/80 backdrop-blur-sm border-0 shadow-2xl rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label="Send us a Message">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
                   <CardHeader className="pb-4">
                     <CardTitle className="text-3xl font-bold bg-gradient-to-r from-primary to-accent bg-clip-text text-transparent">
@@ -213,7 +213,7 @@ export default function ContactPage() {
                       </Alert>
                     )}
 
-                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate>
+                    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6" noValidate aria-label="Contact form">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div className="space-y-2">
                           <Label htmlFor="firstName" className="text-sm font-semibold">
@@ -226,7 +226,8 @@ export default function ContactPage() {
                               minLength: { value: 2, message: "Must be at least 2 characters" },
                             })}
                             placeholder="John"
-                            className={`border border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 rounded-xl h-12 ${errors.firstName ? "border-red-500" : ""}`}
+                            className={`border border-border focus:border-primary focus:ring-2 focus:ring-blue-400 transition-all duration-200 rounded-xl h-12 ${errors.firstName ? "border-red-500" : ""}`}
+                            aria-label="First Name"
                           />
                           {errors.firstName && <p className="text-sm text-red-600">{errors.firstName.message}</p>}
                         </div>
@@ -241,7 +242,8 @@ export default function ContactPage() {
                               minLength: { value: 2, message: "Must be at least 2 characters" },
                             })}
                             placeholder="Doe"
-                            className={`border border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 rounded-xl h-12 ${errors.lastName ? "border-red-500" : ""}`}
+                            className={`border border-border focus:border-primary focus:ring-2 focus:ring-blue-400 transition-all duration-200 rounded-xl h-12 ${errors.lastName ? "border-red-500" : ""}`}
+                            aria-label="Last Name"
                           />
                           {errors.lastName && <p className="text-sm text-red-600">{errors.lastName.message}</p>}
                         </div>
@@ -262,7 +264,8 @@ export default function ContactPage() {
                             },
                           })}
                           placeholder="john@example.com"
-                          className={`border border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 rounded-xl h-12 ${errors.email ? "border-red-500" : ""}`}
+                          className={`border border-border focus:border-primary focus:ring-2 focus:ring-blue-400 transition-all duration-200 rounded-xl h-12 ${errors.email ? "border-red-500" : ""}`}
+                          aria-label="Email Address"
                         />
                         {errors.email && <p className="text-sm text-red-600">{errors.email.message}</p>}
                       </div>
@@ -278,7 +281,8 @@ export default function ContactPage() {
                             minLength: { value: 5, message: "Subject must be at least 5 characters" },
                           })}
                           placeholder="How can we help you?"
-                          className={`border border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 rounded-xl h-12 ${errors.subject ? "border-red-500" : ""}`}
+                          className={`border border-border focus:border-primary focus:ring-2 focus:ring-blue-400 transition-all duration-200 rounded-xl h-12 ${errors.subject ? "border-red-500" : ""}`}
+                          aria-label="Subject"
                         />
                         {errors.subject && <p className="text-sm text-red-600">{errors.subject.message}</p>}
                       </div>
@@ -296,8 +300,9 @@ export default function ContactPage() {
                           })}
                           placeholder="Tell us more about your inquiry, certification goals, or how we can assist you..."
                           rows={5}
-                          className={`border border-border focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all duration-200 rounded-xl min-h-32 ${errors.message ? "border-red-500" : ""}`}
+                          className={`border border-border focus:border-primary focus:ring-2 focus:ring-blue-400 transition-all duration-200 rounded-xl min-h-32 ${errors.message ? "border-red-500" : ""}`}
                           aria-describedby={errors.message ? "message-error" : undefined}
+                          aria-label="Message"
                         />
                         {errors.message && (
                           <p id="message-error" className="text-sm text-red-600" role="alert">
@@ -321,7 +326,8 @@ export default function ContactPage() {
                       <Button
                         type="submit"
                         disabled={isSubmitting}
-                        className="w-full bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground font-semibold py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 group disabled:opacity-50 disabled:cursor-not-allowed"
+                        className="w-full bg-gradient-to-r from-primary to-accent hover:from-primary/90 hover:to-accent/90 text-primary-foreground font-semibold py-3 rounded-xl shadow-lg hover:shadow-xl transition-all duration-300 hover:scale-105 group disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-4 focus:ring-blue-400"
+                        aria-label="Send Message"
                       >
                         {isSubmitting ? (
                           <>
@@ -343,7 +349,7 @@ export default function ContactPage() {
               {/* Enhanced Contact Information */}
               <div className="flex items-start">
                 {/* Contact Methods */}
-                <Card className="bg-gradient-to-br from-card to-muted border-0 shadow-2xl rounded-2xl overflow-hidden w-full">
+                <Card className="bg-gradient-to-br from-card to-muted border-0 shadow-2xl rounded-2xl overflow-hidden w-full focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label="Contact Information">
                   <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-primary to-accent"></div>
                   <CardHeader className="pb-3">
                     <CardTitle className="text-lg lg:text-base text-foreground flex items-center gap-2">
@@ -417,7 +423,7 @@ export default function ContactPage() {
             {/* Connect with Us & FAQ Side by Side - Full Width */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mt-12">
               {/* Social Media */}
-              <Card className="border-0 shadow-xl rounded-2xl overflow-hidden">
+              <Card className="border-0 shadow-xl rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label="Connect With Us">
                 <CardHeader className="bg-gradient-to-r from-primary/10 to-accent/10">
                   <CardTitle className="flex items-center gap-2">
                     <Globe className="h-5 w-5 text-primary" />
@@ -471,7 +477,7 @@ export default function ContactPage() {
               </Card>
 
               {/* FAQ Preview */}
-              <Card className="border-0 shadow-xl rounded-2xl overflow-hidden">
+              <Card className="border-0 shadow-xl rounded-2xl overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label="Quick Answers">
                 <CardHeader className="bg-gradient-to-r from-accent/10 to-secondary/10">
                   <CardTitle>Quick Answers</CardTitle>
                   <CardDescription>Frequently asked questions</CardDescription>
