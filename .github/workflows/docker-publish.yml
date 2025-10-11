@@ -154,33 +154,9 @@ jobs:
 
             cd /home/${{ secrets.SSH_USER }}/app
 
-            # Configure MySQL user for remote access AS ROOT
-            echo "🔧 Configuring MySQL user for remote access..."
-            sudo mysql -e "
-              -- Create database if not exists
-              CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;
-              
-              -- Create user with access from any host
-              CREATE USER IF NOT EXISTS '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD';
-              
-              -- Grant all privileges
-              GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'%';
-              
-              -- Apply changes
-              FLUSH PRIVILEGES;
-            " && echo "✅ MySQL user configured for remote access"
-
             # Get host IP for database connection
             HOST_IP=$(hostname -I | awk '{print $1}')
             echo "📡 Host IP: $HOST_IP"
-
-            echo "🔍 Testing MySQL connection from VPS..."
-            if mysql -h localhost -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
-              echo "✅ MySQL connection successful from VPS"
-            else
-              echo "❌ MySQL connection failed from VPS"
-              exit 1
-            fi
 
             # ===== FORCE CLEAN DEPLOYMENT =====
             echo "🧹 FORCE CLEANING EXISTING CONTAINERS AND IMAGES..."
@@ -195,96 +171,25 @@ jobs:
             docker pull $IMAGE_NAME:main
             echo "✅ Successfully pulled FRESH image"
 
-            # ===== TEMPORARY PASSWORD STRATEGY =====
-            echo "🔄 TEMPORARILY CHANGING MYSQL USER PASSWORD..."
-            TEMP_PASSWORD="Deployer123"
-            
-            # Change to simple temporary password AS ROOT
-            sudo mysql -e "
-              ALTER USER '$MYSQL_USER'@'%' IDENTIFIED BY '$TEMP_PASSWORD';
-              FLUSH PRIVILEGES;
-            " && echo "✅ MySQL user password changed to temporary simple password"
-
-            # ===== CREATE .env FILE WITH SIMPLE PASSWORD =====
-            cat > .env << ENDFILE
-            # Database Configuration
-            DATABASE_URL=mysql://$MYSQL_USER:$TEMP_PASSWORD@host.docker.internal:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10
-
-            # Application Secrets
-            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
-            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
-            NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}
-            NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
-            NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
-            GMAIL_USER=${{ secrets.GMAIL_USER }}
-            GMAIL_PASS=${{ secrets.GMAIL_PASS }}
-            EMAIL_FROM=${{ secrets.EMAIL_FROM }}
-
-            # Seeding Configuration
-            SEED_ADMIN_EMAIL=admin@gspa.com
-            SEED_ADMIN_PASSWORD=Admin@123!
-            ENDFILE
-
-            echo "✅ .env file created with temporary simple password"
-            echo "🔍 Verifying DATABASE_URL is unmasked:"
-            grep DATABASE_URL .env
-
-            # ===== RUN MIGRATIONS WITH UNMASKED URL =====
-            echo "📦 RUNNING MIGRATIONS..."
-            if docker run --rm \
-              --name gspa-migrate \
-              --env-file /home/${{ secrets.SSH_USER }}/app/.env \
-              --add-host=host.docker.internal:host-gateway \
-              $IMAGE_NAME:main \
-              npx prisma migrate deploy; then
-              echo "✅ Migrations completed successfully"
-            else
-              echo "❌ Migrations failed even with simple password"
-              exit 1
-            fi
-
-            # ===== RESTORE ORIGINAL COMPLEX PASSWORD =====
-            echo "🔄 RESTORING ORIGINAL COMPLEX PASSWORD..."
-            sudo mysql -e "
-              ALTER USER '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD';
-              FLUSH PRIVILEGES;
-            " && echo "✅ Original complex password restored"
-
-            # ===== CREATE FINAL .env FILE WITH URL-ENCODED PASSWORD =====
-            cat > .env << ENDFILE
-            # Database Configuration
-            DATABASE_URL=mysql://$MYSQL_USER:%21Deployer1%40%23%24%25%5E%26%2A%28%29@host.docker.internal:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10
-
-            # Application Secrets
-            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
-            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
-            NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}
-            NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
-            NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
-            GMAIL_USER=${{ secrets.GMAIL_USER }}
-            GMAIL_PASS=${{ secrets.GMAIL_PASS }}
-            EMAIL_FROM=${{ secrets.EMAIL_FROM }}
-
-            # Seeding Configuration
-            SEED_ADMIN_EMAIL=admin@gspa.com
-            SEED_ADMIN_PASSWORD=Admin@123!
-            ENDFILE
-
-            echo "✅ Final .env file created with URL-encoded complex password"
-
-            # ===== START APPLICATION CONTAINER =====
-            echo "🎯 STARTING APPLICATION CONTAINER..."
+            # ===== USE HOST NETWORK AND LOCALHOST =====
+            echo "🎯 STARTING APPLICATION CONTAINER WITH HOST NETWORK..."
             docker run -d \
               --name gspa-app \
-              --env-file /home/${{ secrets.SSH_USER }}/app/.env \
-              --add-host=host.docker.internal:host-gateway \
-              -p 3000:3000 \
+              --network="host" \
+              -e DATABASE_URL="mysql://$MYSQL_USER:$MYSQL_PASSWORD@localhost:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10" \
+              -e NEXTAUTH_SECRET='${{ secrets.NEXTAUTH_SECRET }}' \
+              -e NEXTAUTH_URL='${{ secrets.NEXTAUTH_URL }}' \
+              -e JWT_SECRET='${{ secrets.JWT_SECRET }}' \
+              -e RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}' \
+              -e PAYSTACK_SECRET_KEY='${{ secrets.PAYSTACK_SECRET_KEY }}' \
+              -e NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY='${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}' \
+              -e NEXT_PUBLIC_SITE_URL='${{ secrets.NEXT_PUBLIC_SITE_URL }}' \
+              -e NEXT_PUBLIC_APP_URL='${{ secrets.NEXT_PUBLIC_APP_URL }}' \
+              -e GMAIL_USER='${{ secrets.GMAIL_USER }}' \
+              -e GMAIL_PASS='${{ secrets.GMAIL_PASS }}' \
+              -e EMAIL_FROM='${{ secrets.EMAIL_FROM }}' \
+              -e SEED_ADMIN_EMAIL='admin@gspa.com' \
+              -e SEED_ADMIN_PASSWORD='Admin@123!' \
               --restart unless-stopped \
               $IMAGE_NAME:main
 
@@ -297,6 +202,23 @@ jobs:
               echo "⏳ Waiting for application to start... ($i/30)"
               sleep 5
             done
+
+            # ===== RUN MIGRATIONS FROM INSIDE THE CONTAINER =====
+            echo "📦 RUNNING MIGRATIONS FROM INSIDE CONTAINER..."
+            if docker exec gspa-app npx prisma migrate deploy; then
+              echo "✅ Migrations completed successfully"
+            else
+              echo "❌ Migrations failed - trying alternative approach..."
+              
+              # Alternative: Run migrations with a separate container using host network
+              docker run --rm \
+                --network="host" \
+                -e DATABASE_URL="mysql://$MYSQL_USER:$MYSQL_PASSWORD@localhost:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10" \
+                $IMAGE_NAME:main \
+                npx prisma migrate deploy
+              
+              echo "✅ Migrations completed successfully with alternative approach"
+            fi
 
             # ===== RUN SEEDING =====
             echo "🌱 Running database seeding..."
