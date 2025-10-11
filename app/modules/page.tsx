@@ -130,14 +130,8 @@ export default function ModulesPage() {
     setFilteredModules(filtered)
   }
 
-  const handleEnroll = async (module: Module) => {
-    if (!session?.user) {
-      router.push('/auth/login')
-      return
-    }
-
-    // Redirect to payment page with module info
-    router.push(`/payment?type=module&moduleId=${module.id}`)
+  const handleEnroll = (module: Module) => {
+    router.push('/register')
   }
 
   const getDifficultyColor = (difficulty: string) => {

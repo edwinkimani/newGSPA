@@ -114,11 +114,23 @@ export default function WhyJoinPage() {
                   bg: "bg-secondary/10"
                 }
               ].map((benefit, index) => (
-                <Card key={index} className="relative border-0 shadow-xl hover:shadow-2xl transition-all duration-300 hover:scale-105 group overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label={benefit.title}>
+                <Card key={index} className="relative border-0 shadow-md hover:shadow-lg transition-all duration-300 hover:scale-105 group overflow-hidden focus-within:ring-4 focus-within:ring-blue-400" tabIndex={0} aria-label={benefit.title}>
                   <div className={`absolute inset-0 bg-gradient-to-br ${benefit.color} opacity-5 group-hover:opacity-10 transition-opacity duration-300`}></div>
-                  <CardHeader className="relative z-10">
-                    <div className={`inline-flex p-3 rounded-2xl ${benefit.bg} mb-4 group-hover:scale-110 transition-transform duration-300`}>
-                      <benefit.icon className={`h-8 w-8 bg-gradient-to-r ${benefit.color} bg-clip-text text-transparent`} />
+                  <CardHeader className="relative z-10 flex flex-col items-center">
+                    <div className="flex items-center justify-center mx-auto p-4 rounded-full bg-white shadow group-hover:scale-110 transition-transform duration-300 mb-4">
+                      {benefit.title === "Global Recognition" ? (
+                        <benefit.icon className="h-8 w-8 text-accent drop-shadow" />
+                      ) : benefit.title === "Professional Network" ? (
+                        <benefit.icon className="h-8 w-8 text-secondary drop-shadow" />
+                      ) : benefit.title === "Credibility Boost" ? (
+                        <benefit.icon className="h-8 w-8 text-accent drop-shadow" />
+                      ) : benefit.title === "Community Support" ? (
+                        <benefit.icon className="h-8 w-8 text-secondary drop-shadow" />
+                      ) : benefit.title === "Career Growth" ? (
+                        <benefit.icon className="h-8 w-8 text-primary drop-shadow" />
+                      ) : (
+                        <benefit.icon className="h-8 w-8 text-primary drop-shadow" />
+                      )}
                     </div>
                     <CardTitle className="text-xl font-bold bg-gradient-to-r from-foreground to-muted-foreground bg-clip-text text-transparent">
                       {benefit.title}
