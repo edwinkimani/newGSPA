@@ -134,147 +134,169 @@ jobs:
     
  
    # In your deploy-to-vps job, replace the entire script section with this:
-
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.0
         with:
-          host: ${{ secrets.SSH_HOST }}
-          username: ${{ secrets.SSH_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: ${{ secrets.SSH_PORT || 22 }}
-          script: |
-            set -e
-      
-            # Export environment variables
-            export MYSQL_ROOT_PASSWORD='${{ secrets.MYSQL_ROOT_PASSWORD }}'
-            export MYSQL_DATABASE='${{ secrets.MYSQL_DATABASE }}'
-            export MYSQL_USER='gspa_db_deployer'
-            export MYSQL_PASSWORD='!Deployer1@#$%^&*()'
+            host: ${{ secrets.SSH_HOST }}
+            username: ${{ secrets.SSH_USER }}
+            key: ${{ secrets.SSH_PRIVATE_KEY }}
+            port: ${{ secrets.SSH_PORT || 22 }}
+            script: |
+              set -e
+        
+              # Export environment variables
+              export MYSQL_ROOT_PASSWORD='${{ secrets.MYSQL_ROOT_PASSWORD }}'
+              export MYSQL_DATABASE='${{ secrets.MYSQL_DATABASE }}'
+              export MYSQL_USER='gspa_db_deployer'
+              export MYSQL_PASSWORD='!Deployer1@#$%^&*()'
 
-            # Login to Docker Hub
-            echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
+              # Login to Docker Hub
+              echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
 
-            cd /home/${{ secrets.SSH_USER }}/app
+              cd /home/${{ secrets.SSH_USER }}/app
 
-            # Configure MySQL user for remote access
-            echo "🔧 Configuring MySQL user for remote access..."
-            mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "
-              -- Create database if not exists
-              CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;
-              
-              -- Create user with access from any host
-              CREATE USER IF NOT EXISTS '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD';
-              
-              -- Grant all privileges
-              GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'%';
-              
-              -- Apply changes
-              FLUSH PRIVILEGES;
-            " && echo "✅ MySQL user configured for remote access" || echo "⚠️ MySQL user configuration had issues"
+              # Configure MySQL user for remote access
+              echo "🔧 Configuring MySQL user for remote access..."
+              mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "
+                -- Create database if not exists
+                CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;
+                
+                -- Create user with access from any host
+                CREATE USER IF NOT EXISTS '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD';
+                
+                -- Grant all privileges
+                GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'%';
+                
+                -- Apply changes
+                FLUSH PRIVILEGES;
+              " && echo "✅ MySQL user configured for remote access" || echo "⚠️ MySQL user configuration had issues"
 
-            # Get host IP for database connection
-            HOST_IP=$(hostname -I | awk '{print $1}')
-            echo "📡 Host IP: $HOST_IP"
+              # Get host IP for database connection
+              HOST_IP=$(hostname -I | awk '{print $1}')
+              echo "📡 Host IP: $HOST_IP"
 
-            # Create environment file with CORRECT URL encoding
-            # The password: !Deployer1@#$%^&*()
-            # URL encoded: ! = %21, @ = %40, # = %23, $ = %24, % = %25, ^ = %5E, & = %26, * = %2A, ( = %28, ) = %29
-            cat > .env << ENDFILE
-            # Database Configuration
-            DATABASE_URL="mysql://gspa_db_deployer:%21Deployer1%40%23%24%25%5E%26%2A%28%29@host.docker.internal:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10"
-            
-            # Application Secrets
-            NEXTAUTH_SECRET='${{ secrets.NEXTAUTH_SECRET }}'
-            NEXTAUTH_URL='${{ secrets.NEXTAUTH_URL }}'
-            JWT_SECRET='${{ secrets.JWT_SECRET }}'
-            RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}'
-            PAYSTACK_SECRET_KEY='${{ secrets.PAYSTACK_SECRET_KEY }}'
-            NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY='${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}'
-            NEXT_PUBLIC_SITE_URL='${{ secrets.NEXT_PUBLIC_SITE_URL }}'
-            NEXT_PUBLIC_APP_URL='${{ secrets.NEXT_PUBLIC_APP_URL }}'
-            GMAIL_USER='${{ secrets.GMAIL_USER }}'
-            GMAIL_PASS='${{ secrets.GMAIL_PASS }}'
-            EMAIL_FROM='${{ secrets.EMAIL_FROM }}'
-            
-            # Seeding Configuration
-            SEED_ADMIN_EMAIL=admin@gspa.com
-            SEED_ADMIN_PASSWORD=Admin@123!
-            ENDFILE
+              # Create environment file with CORRECT DATABASE_URL
+              cat > .env << ENDFILE
+              # Database Configuration
+              DATABASE_URL="mysql://gspa_db_deployer:%21Deployer1%40%23%24%25%5E%26%2A%28%29@host.docker.internal:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10"
 
-            echo "🔍 Testing MySQL connection from VPS..."
-            if mysql -h localhost -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
-              echo "✅ MySQL connection successful from VPS"
-            else
-              echo "❌ MySQL connection failed from VPS"
-              exit 1
-            fi
+              # Application Secrets
+              NEXTAUTH_SECRET='${{ secrets.NEXTAUTH_SECRET }}'
+              NEXTAUTH_URL='${{ secrets.NEXTAUTH_URL }}'
+              JWT_SECRET='${{ secrets.JWT_SECRET }}'
+              RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}'
+              PAYSTACK_SECRET_KEY='${{ secrets.PAYSTACK_SECRET_KEY }}'
+              NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY='${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}'
+              NEXT_PUBLIC_SITE_URL='${{ secrets.NEXT_PUBLIC_SITE_URL }}'
+              NEXT_PUBLIC_APP_URL='${{ secrets.NEXT_PUBLIC_APP_URL }}'
+              GMAIL_USER='${{ secrets.GMAIL_USER }}'
+              GMAIL_PASS='${{ secrets.GMAIL_PASS }}'
+              EMAIL_FROM='${{ secrets.EMAIL_FROM }}'
 
-            # ===== FORCE CLEAN DEPLOYMENT =====
-            echo "🧹 FORCE CLEANING EXISTING CONTAINERS AND IMAGES..."
-            docker stop gspa-app 2>/dev/null || echo "No gspa-app container to stop"
-            docker rm -f gspa-app 2>/dev/null || echo "No gspa-app container to remove"
-            docker container prune -f
-            docker image prune -f
+              # Seeding Configuration
+              SEED_ADMIN_EMAIL=admin@gspa.com
+              SEED_ADMIN_PASSWORD=Admin@123!
+              ENDFILE
+              echo "✅ .env file created with database connection details"
+              # Verify the .env file was created correctly
+              echo "🔍 Verifying .env file contents..."
+              echo "DATABASE_URL from .env:"
+              grep DATABASE_URL .env
 
-            IMAGE_NAME="${{ env.IMAGE_NAME }}"
-            SHA_SHORT="${{ steps.sha.outputs.sha_short }}"
-
-            echo "🔄 PULLING FRESH DOCKER IMAGE..."
-            docker pull $IMAGE_NAME:main
-            echo "✅ Successfully pulled FRESH image"
-
-            # ===== CRITICAL FIX: Run migrations FIRST in a temporary container =====
-            echo "📦 RUNNING MIGRATIONS FIRST..."
-            docker run --rm \
-              --name gspa-migrate \
-              --env-file /home/${{ secrets.SSH_USER }}/app/.env \
-              --add-host=host.docker.internal:host-gateway \
-              $IMAGE_NAME:main \
-              npx prisma migrate deploy
-
-            echo "✅ Migrations completed successfully"
-
-            # ===== NOW start the application container =====
-            echo "🎯 STARTING APPLICATION CONTAINER..."
-            docker run -d \
-              --name gspa-app \
-              --env-file /home/${{ secrets.SSH_USER }}/app/.env \
-              --add-host=host.docker.internal:host-gateway \
-              -p 3000:3000 \
-              --restart unless-stopped \
-              $IMAGE_NAME:main
-
-            echo "⏳ Waiting for application to start..."
-            for i in {1..30}; do
-              if curl -f http://localhost:3000/ >/dev/null 2>&1; then
-                echo "✅ Application is healthy and responding"
-                break
+              echo "🔍 Testing MySQL connection from VPS..."
+              if mysql -h localhost -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
+                echo "✅ MySQL connection successful from VPS"
+              else
+                echo "❌ MySQL connection failed from VPS"
+                exit 1
               fi
-              echo "⏳ Waiting for application to start... ($i/30)"
-              sleep 5
-            done
 
-            # ===== Run seeding =====
-            echo "🌱 Running database seeding..."
-            if docker exec gspa-app npx tsx prisma/seeders/seed.ts; then
-              echo "✅ Seeding completed successfully"
-            else
-              echo "⚠️ Seeding failed or already completed"
-            fi
+              # ===== FORCE CLEAN DEPLOYMENT =====
+              echo "🧹 FORCE CLEANING EXISTING CONTAINERS AND IMAGES..."
+              docker stop gspa-app 2>/dev/null || echo "No gspa-app container to stop"
+              docker rm -f gspa-app 2>/dev/null || echo "No gspa-app container to remove"
+              docker container prune -f
+              docker image prune -f
 
-            # Final verification
-            echo "🔍 Verifying deployment..."
-            docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-            
-            if curl -f http://localhost:3000/ >/dev/null 2>&1; then
-              echo "✅ 🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
-              echo "=== RECENT APPLICATION LOGS ==="
-              docker logs gspa-app --tail 10
-            else
-              echo "❌ Deployment failed - application not responding"
-              echo "=== CONTAINER LOGS ==="
-              docker logs gspa-app
-              exit 1
-            fi
+              IMAGE_NAME="${{ env.IMAGE_NAME }}"
 
-            echo "🚀 DEPLOYMENT PROCESS FINISHED!"
+              echo "🔄 PULLING FRESH DOCKER IMAGE..."
+              docker pull $IMAGE_NAME:main
+              echo "✅ Successfully pulled FRESH image"
+
+              # ===== TEST DATABASE CONNECTION FIRST =====
+              echo "🔧 Testing database connection from container..."
+              docker run --rm \
+                --name gspa-test-db \
+                --env-file /home/${{ secrets.SSH_USER }}/app/.env \
+                --add-host=host.docker.internal:host-gateway \
+                $IMAGE_NAME:main \
+                node -e "
+                  const { PrismaClient } = require('@prisma/client');
+                  const prisma = new PrismaClient();
+                  prisma.\$queryRaw\`SELECT 1\`
+                    .then(() => {
+                      console.log('✅ Database connection successful from container');
+                      process.exit(0);
+                    })
+                    .catch(err => {
+                      console.log('❌ Database connection failed:', err.message);
+                      process.exit(1);
+                    });
+                "
+
+              # ===== RUN MIGRATIONS =====
+              echo "📦 RUNNING MIGRATIONS..."
+              docker run --rm \
+                --name gspa-migrate \
+                --env-file /home/${{ secrets.SSH_USER }}/app/.env \
+                --add-host=host.docker.internal:host-gateway \
+                $IMAGE_NAME:main \
+                npx prisma migrate deploy
+
+              echo "✅ Migrations completed successfully"
+
+              # ===== START APPLICATION CONTAINER =====
+              echo "🎯 STARTING APPLICATION CONTAINER..."
+              docker run -d \
+                --name gspa-app \
+                --env-file /home/${{ secrets.SSH_USER }}/app/.env \
+                --add-host=host.docker.internal:host-gateway \
+                -p 3000:3000 \
+                --restart unless-stopped \
+                $IMAGE_NAME:main
+
+              echo "⏳ Waiting for application to start..."
+              for i in {1..30}; do
+                if curl -f http://localhost:3000/ >/dev/null 2>&1; then
+                  echo "✅ Application is healthy and responding"
+                  break
+                fi
+                echo "⏳ Waiting for application to start... ($i/30)"
+                sleep 5
+              done
+
+              # ===== RUN SEEDING =====
+              echo "🌱 Running database seeding..."
+              if docker exec gspa-app npx tsx prisma/seeders/seed.ts; then
+                echo "✅ Seeding completed successfully"
+              else
+                echo "⚠️ Seeding failed or already completed"
+              fi
+
+              # Final verification
+              echo "🔍 Verifying deployment..."
+              docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
+              
+              if curl -f http://localhost:3000/ >/dev/null 2>&1; then
+                echo "✅ 🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
+                echo "=== RECENT APPLICATION LOGS ==="
+                docker logs gspa-app --tail 10
+              else
+                echo "❌ Deployment failed - application not responding"
+                echo "=== CONTAINER LOGS ==="
+                docker logs gspa-app
+                exit 1
+              fi
+
+              echo "🚀 DEPLOYMENT PROCESS FINISHED!"
