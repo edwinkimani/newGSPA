@@ -100,7 +100,8 @@
     "tailwindcss": "latest",
     "ts-node": "latest",
     "tw-animate-css": "latest",
-    "typescript": "latest"
+    "typescript": "latest",
+    "tsx": "^4.0.0"
   },
   "overrides": {
     "rimraf": "^4.0.0",

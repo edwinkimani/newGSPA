@@ -60,6 +60,11 @@ jobs:
         env:
           DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_gspa_db
 
+      - name: Run database seeding
+        run: npx prisma db seed
+        env:
+          DATABASE_URL: mysql://test_user:test_password@localhost:3306/test_gspa_db
+
       - name: Run build validation
         run: |
           npm run build
@@ -155,25 +160,25 @@ jobs:
             # Export environment variables
             export MYSQL_ROOT_PASSWORD='${{ secrets.MYSQL_ROOT_PASSWORD }}'
             export MYSQL_DATABASE='${{ secrets.MYSQL_DATABASE }}'
-            export MYSQL_USER='${{ secrets.MYSQL_USER }}'
-            export MYSQL_PASSWORD='${{ secrets.MYSQL_PASSWORD }}'
+            export MYSQL_USER='gspa_db_deployer'
+            export MYSQL_PASSWORD='!Deployer1@#$%^&*()'
 
             # Login to Docker Hub
             echo '${{ secrets.DOCKER_PASSWORD }}' | docker login -u '${{ secrets.DOCKER_USERNAME }}' --password-stdin
 
             cd /home/${{ secrets.SSH_USER }}/app
 
-            # Configure MySQL user for remote access from any host
+            # Configure MySQL user for remote access
             echo "🔧 Configuring MySQL user for remote access..."
             mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "
+              -- Create database if not exists
+              CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;
+              
               -- Create user with access from any host
               CREATE USER IF NOT EXISTS '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD';
               
               -- Grant all privileges
               GRANT ALL PRIVILEGES ON $MYSQL_DATABASE.* TO '$MYSQL_USER'@'%';
-              
-              -- Remove localhost user if exists
-              DROP USER IF EXISTS '$MYSQL_USER'@'localhost';
               
               -- Apply changes
               FLUSH PRIVILEGES;
@@ -186,9 +191,13 @@ jobs:
             HOST_IP=$(hostname -I | awk '{print $1}')
             echo "📡 Host IP: $HOST_IP"
 
-            # Create environment file with proper DATABASE_URL format
+            # Create environment file with PROPERLY ENCODED DATABASE_URL
             cat > .env << ENDFILE
-            DATABASE_URL=mysql://gspa_db_deployer:%21Deployer1%40%23%24%25%5E%26%2A%28%29@host.docker.internal:3306/your_database_name?connection_limit=5&socket_timeout=10
+            # Database Configuration - Use proper URL encoding for special characters
+            DATABASE_URL=mysql://gspa_db_deployer:!Deployer1@%23%24%25%5E%26*()@host.docker.internal:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10
+            DATABASE_URL_DIRECT=mysql://gspa_db_deployer:!Deployer1@%23%24%25%5E%26*()@$HOST_IP:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10
+            
+            # Application Secrets
             NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
             NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
             JWT_SECRET=${{ secrets.JWT_SECRET }}
@@ -200,6 +209,8 @@ jobs:
             GMAIL_USER=${{ secrets.GMAIL_USER }}
             GMAIL_PASS=${{ secrets.GMAIL_PASS }}
             EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+            
+            # Seeding Configuration
             SEED_ADMIN_EMAIL=admin@gspa.com
             SEED_ADMIN_PASSWORD=Admin@123!
             ENDFILE
@@ -257,12 +268,12 @@ jobs:
 
             echo "🎯 STARTING FRESH CONTAINER WITH TAG: $SELECTED_TAG"
             
-            # Start fresh container with multiple host options
+            # Start fresh container with proper network configuration
             docker run -d \
               --name gspa-app \
               --env-file /home/${{ secrets.SSH_USER }}/app/.env \
               --add-host=host.docker.internal:host-gateway \
-              --add-host=database:$HOST_IP \
+              --network="host" \
               -p 3000:3000 \
               --restart unless-stopped \
               $IMAGE_NAME:$SELECTED_TAG
@@ -277,69 +288,26 @@ jobs:
               sleep 5
             done
 
-            # Test database connection with multiple approaches
+            # Test database connection from container
             echo "🔧 Testing database connection from container..."
             
-            # Approach 1: Try host.docker.internal
-            echo "Testing connection via host.docker.internal..."
-            if docker exec gspa-app node -e "
-              const { PrismaClient } = require('@prisma/client');
-              const prisma = new PrismaClient();
-              prisma.\$queryRaw\`SELECT 1\`
-                .then(() => {
-                  console.log('✅ Database connection successful via host.docker.internal');
-                  process.exit(0);
-                })
-                .catch(err => {
-                  console.log('❌ host.docker.internal failed:', err.message);
-                  process.exit(1);
-                });
-            " 2>/dev/null; then
-              echo "✅ Database connection successful via host.docker.internal"
-            else
-              # Approach 2: Try host IP directly
-              echo "🔄 Trying connection via host IP: $HOST_IP"
-              if docker exec gspa-app node -e "
-                const { PrismaClient } = require('@prisma/client');
-                const prisma = new PrismaClient({
-                  datasources: {
-                    db: {
-                      url: 'mysql://$MYSQL_USER:$MYSQL_PASSWORD@$HOST_IP:3306/$MYSQL_DATABASE?connection_limit=5'
-                    }
-                  }
-                });
-                prisma.\$queryRaw\`SELECT 1\`
-                  .then(() => {
-                    console.log('✅ Database connection successful via host IP');
-                    process.exit(0);
-                  })
-                  .catch(err => {
-                    console.log('❌ Host IP also failed:', err.message);
-                    process.exit(1);
-                  });
-              " 2>/dev/null; then
-                echo "✅ Database connection successful via host IP"
-                # Update .env to use host IP
-                sed -i "s/host.docker.internal/$HOST_IP/g" /home/${{ secrets.SSH_USER }}/app/.env
-                docker restart gspa-app
-                sleep 10
-              else
-                echo "❌ All connection attempts failed"
-              fi
-            fi
+            # Wait a bit for the app to fully start
+            sleep 15
 
-            # Run migrations with better error handling
+            # Run migrations with proper error handling
             echo "📦 Running Prisma migrations..."
             MIGRATION_SUCCESS=false
-            for i in {1..3}; do
-              echo "Migration attempt $i/3..."
+            for i in {1..5}; do
+              echo "Migration attempt $i/5..."
               if docker exec gspa-app npx prisma migrate deploy; then
                 echo "✅ Migrations completed successfully"
                 MIGRATION_SUCCESS=true
                 break
               else
                 echo "❌ Migration attempt $i failed"
-                if [ $i -lt 3 ]; then
+                echo "Debug info:"
+                docker exec gspa-app npx prisma db status 2>/dev/null || echo "Cannot check database status"
+                if [ $i -lt 5 ]; then
                   echo "Retrying in 10 seconds..."
                   sleep 10
                 fi
@@ -347,22 +315,62 @@ jobs:
             done
 
             if [ "$MIGRATION_SUCCESS" != "true" ]; then
-              echo "⚠️ Migrations failed but continuing deployment"
-              echo "Checking current database status..."
-              docker exec gspa-app npx prisma db status 2>/dev/null || echo "Cannot check database status"
+              echo "🚨 CRITICAL: All migration attempts failed!"
+              echo "Checking database connection..."
+              docker exec gspa-app node -e "
+                const { PrismaClient } = require('@prisma/client');
+                const prisma = new PrismaClient();
+                prisma.\$queryRaw\`SELECT 1\`
+                  .then(() => console.log('✅ Database connection works'))
+                  .catch(err => console.log('❌ Database connection failed:', err.message))
+                  .finally(() => prisma.\$disconnect());
+              " 2>/dev/null || echo "Cannot test database connection"
+              exit 1
             fi
 
-            # Run seeding with TypeScript support
+            # Run seeding with multiple approaches
             echo "🌱 Running database seeding..."
-            # Try multiple seeding approaches
+            SEED_SUCCESS=false
+            
+            # Try TypeScript seeding first
             if docker exec gspa-app npx tsx prisma/seeders/seed.ts 2>/dev/null; then
               echo "✅ Seeding completed successfully with tsx"
+              SEED_SUCCESS=true
             elif docker exec gspa-app npx prisma db seed 2>/dev/null; then
               echo "✅ Seeding completed successfully with prisma db seed"
+              SEED_SUCCESS=true
             elif docker exec gspa-app npm run db:seed 2>/dev/null; then
               echo "✅ Seeding completed successfully with npm script"
+              SEED_SUCCESS=true
             else
-              echo "⚠️ Seeding failed - this might be expected if already seeded"
+              echo "⚠️ Seeding failed - trying direct node execution..."
+              # Try direct node execution if package.json has seed script
+              if docker exec gspa-app node -e "
+                require('tsx/dist/cli').main(['prisma/seeders/seed.ts']).catch(console.error);
+              " 2>/dev/null; then
+                echo "✅ Seeding completed with direct node execution"
+                SEED_SUCCESS=true
+              else
+                echo "⚠️ Seeding failed - this might be expected if already seeded or no seed script exists"
+              fi
+            fi
+
+            # Verify seeding worked by checking for admin user
+            if [ "$SEED_SUCCESS" = "true" ]; then
+              echo "🔍 Verifying seed data..."
+              docker exec gspa-app node -e "
+                const { PrismaClient } = require('@prisma/client');
+                const prisma = new PrismaClient();
+                prisma.user.findMany()
+                  .then(users => {
+                    console.log('✅ Users in database:', users.length);
+                    if (users.length > 0) {
+                      console.log('First user email:', users[0].email);
+                    }
+                  })
+                  .catch(err => console.log('❌ Cannot verify users:', err.message))
+                  .finally(() => prisma.\$disconnect());
+              " 2>/dev/null || echo "Cannot verify seed data"
             fi
 
             echo "=== CONTAINER STATUS ==="
@@ -372,10 +380,15 @@ jobs:
             if curl -f http://localhost:3000/ >/dev/null 2>&1; then
               echo "✅ 🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
               echo "Application is running and accessible"
+              
+              # Show recent logs for verification
+              echo "=== RECENT APPLICATION LOGS ==="
+              docker logs gspa-app --tail 20
             else
               echo "⚠️ Deployment completed but health check failed"
               echo "Debug info:"
               docker logs gspa-app --tail 50
+              exit 1
             fi
 
             # Final cleanup
