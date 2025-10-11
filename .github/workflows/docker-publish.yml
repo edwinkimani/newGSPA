@@ -132,20 +132,8 @@ jobs:
           echo "Tags pushed: ${{ steps.meta.outputs.tags }}"
           echo "You can check your image at: https://hub.docker.com/r/${{ secrets.DOCKER_USERNAME }}/my-gspa-app"
     
-  deploy-to-vps:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    if: github.ref == 'refs/heads/main'
-
-    steps:
-      - name: Wait for image availability
-        run: |
-          echo "Waiting for Docker Hub image propagation..."
-          sleep 60
-
-      - name: Get commit SHA for image tag
-        id: sha
-        run: echo "sha_short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+ 
+   # In your deploy-to-vps job, replace the entire script section with this:
 
       - name: Deploy to VPS via SSH
         uses: appleboy/ssh-action@v1.0.0
@@ -182,33 +170,31 @@ jobs:
               
               -- Apply changes
               FLUSH PRIVILEGES;
-              
-              -- Verify user creation
-              SELECT user, host FROM mysql.user WHERE user = '$MYSQL_USER';
-            " 2>/dev/null && echo "✅ MySQL user configured for remote access" || echo "⚠️ MySQL user configuration had issues"
+            " && echo "✅ MySQL user configured for remote access" || echo "⚠️ MySQL user configuration had issues"
 
-            # Get host IP for database connection fallback
+            # Get host IP for database connection
             HOST_IP=$(hostname -I | awk '{print $1}')
             echo "📡 Host IP: $HOST_IP"
 
-            # Create environment file with PROPERLY ENCODED DATABASE_URL
+            # Create environment file with CORRECT URL encoding
+            # The password: !Deployer1@#$%^&*()
+            # URL encoded: ! = %21, @ = %40, # = %23, $ = %24, % = %25, ^ = %5E, & = %26, * = %2A, ( = %28, ) = %29
             cat > .env << ENDFILE
-            # Database Configuration - Use proper URL encoding for special characters
-            DATABASE_URL=mysql://gspa_db_deployer:!Deployer1@%23%24%25%5E%26*()@host.docker.internal:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10
-            DATABASE_URL_DIRECT=mysql://gspa_db_deployer:!Deployer1@%23%24%25%5E%26*()@$HOST_IP:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10
+            # Database Configuration
+            DATABASE_URL="mysql://gspa_db_deployer:%21Deployer1%40%23%24%25%5E%26%2A%28%29@host.docker.internal:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10"
             
             # Application Secrets
-            NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-            NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
-            JWT_SECRET=${{ secrets.JWT_SECRET }}
-            RESEND_API_KEY=${{ secrets.RESEND_API_KEY }}
-            PAYSTACK_SECRET_KEY=${{ secrets.PAYSTACK_SECRET_KEY }}
-            NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}
-            NEXT_PUBLIC_SITE_URL=${{ secrets.NEXT_PUBLIC_SITE_URL }}
-            NEXT_PUBLIC_APP_URL=${{ secrets.NEXT_PUBLIC_APP_URL }}
-            GMAIL_USER=${{ secrets.GMAIL_USER }}
-            GMAIL_PASS=${{ secrets.GMAIL_PASS }}
-            EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+            NEXTAUTH_SECRET='${{ secrets.NEXTAUTH_SECRET }}'
+            NEXTAUTH_URL='${{ secrets.NEXTAUTH_URL }}'
+            JWT_SECRET='${{ secrets.JWT_SECRET }}'
+            RESEND_API_KEY='${{ secrets.RESEND_API_KEY }}'
+            PAYSTACK_SECRET_KEY='${{ secrets.PAYSTACK_SECRET_KEY }}'
+            NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY='${{ secrets.NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY }}'
+            NEXT_PUBLIC_SITE_URL='${{ secrets.NEXT_PUBLIC_SITE_URL }}'
+            NEXT_PUBLIC_APP_URL='${{ secrets.NEXT_PUBLIC_APP_URL }}'
+            GMAIL_USER='${{ secrets.GMAIL_USER }}'
+            GMAIL_PASS='${{ secrets.GMAIL_PASS }}'
+            EMAIL_FROM='${{ secrets.EMAIL_FROM }}'
             
             # Seeding Configuration
             SEED_ADMIN_EMAIL=admin@gspa.com
@@ -219,180 +205,76 @@ jobs:
             if mysql -h localhost -u "$MYSQL_USER" -p"$MYSQL_PASSWORD" -e "USE $MYSQL_DATABASE; SELECT 1;" 2>/dev/null; then
               echo "✅ MySQL connection successful from VPS"
             else
-              echo "❌ MySQL connection failed from VPS - testing with root user..."
-              mysql -h localhost -u root -p"$MYSQL_ROOT_PASSWORD" -e "SHOW DATABASES;" 2>/dev/null && echo "✅ Root connection works" || echo "❌ Root connection also failed"
+              echo "❌ MySQL connection failed from VPS"
+              exit 1
             fi
 
             # ===== FORCE CLEAN DEPLOYMENT =====
             echo "🧹 FORCE CLEANING EXISTING CONTAINERS AND IMAGES..."
-
-            # Stop and remove any existing app container
-            echo "Stopping and removing existing containers..."
             docker stop gspa-app 2>/dev/null || echo "No gspa-app container to stop"
             docker rm -f gspa-app 2>/dev/null || echo "No gspa-app container to remove"
-
-            # Remove any other containers using the same image
-            echo "Removing any other containers using the same image..."
-            docker ps -a --filter "ancestor=${{ env.IMAGE_NAME }}" --format "{{.ID}}" | xargs -r docker rm -f || true
-
-            # Clean up containers and images
-            echo "Cleaning up containers and images..."
             docker container prune -f
-            docker images ${{ env.IMAGE_NAME }} -q | xargs -r docker rmi -f || true
             docker image prune -f
 
             IMAGE_NAME="${{ env.IMAGE_NAME }}"
             SHA_SHORT="${{ steps.sha.outputs.sha_short }}"
 
             echo "🔄 PULLING FRESH DOCKER IMAGE..."
+            docker pull $IMAGE_NAME:main
+            echo "✅ Successfully pulled FRESH image"
 
-            # Try multiple tags in order of preference
-            SELECTED_TAG=""
-            for TAG in "main-$SHA_SHORT" "main" "latest"; do
-              echo "Trying to pull tag: $TAG"
-              if docker pull $IMAGE_NAME:$TAG; then
-                echo "✅ Successfully pulled FRESH image with tag: $TAG"
-                SELECTED_TAG="$TAG"
-                break
-              else
-                echo "❌ Failed to pull tag: $TAG"
-              fi
-            done
+            # ===== CRITICAL FIX: Run migrations FIRST in a temporary container =====
+            echo "📦 RUNNING MIGRATIONS FIRST..."
+            docker run --rm \
+              --name gspa-migrate \
+              --env-file /home/${{ secrets.SSH_USER }}/app/.env \
+              --add-host=host.docker.internal:host-gateway \
+              $IMAGE_NAME:main \
+              npx prisma migrate deploy
 
-            if [ -z "$SELECTED_TAG" ]; then
-              echo "🚨 CRITICAL: Could not pull any Docker image!"
-              echo "Available tags on Docker Hub:"
-              curl -s "https://registry.hub.docker.com/v2/repositories/${{ secrets.DOCKER_USERNAME }}/my-gspa-app/tags/?page_size=10" | jq -r '.results[].name' 2>/dev/null || echo "Cannot fetch tags"
-              exit 1
-            fi
+            echo "✅ Migrations completed successfully"
 
-            echo "🎯 STARTING FRESH CONTAINER WITH TAG: $SELECTED_TAG"
-            
-            # Start fresh container with proper network configuration
+            # ===== NOW start the application container =====
+            echo "🎯 STARTING APPLICATION CONTAINER..."
             docker run -d \
               --name gspa-app \
               --env-file /home/${{ secrets.SSH_USER }}/app/.env \
               --add-host=host.docker.internal:host-gateway \
-              --network="host" \
               -p 3000:3000 \
               --restart unless-stopped \
-              $IMAGE_NAME:$SELECTED_TAG
+              $IMAGE_NAME:main
 
-            echo "⏳ Waiting for fresh application to start..."
+            echo "⏳ Waiting for application to start..."
             for i in {1..30}; do
               if curl -f http://localhost:3000/ >/dev/null 2>&1; then
-                echo "✅ FRESH Application is healthy and responding"
+                echo "✅ Application is healthy and responding"
                 break
               fi
-              echo "⏳ Waiting for fresh application to start... ($i/30)"
+              echo "⏳ Waiting for application to start... ($i/30)"
               sleep 5
             done
 
-            # Test database connection from container
-            echo "🔧 Testing database connection from container..."
-            
-            # Wait a bit for the app to fully start
-            sleep 15
-
-            # Run migrations with proper error handling
-            echo "📦 Running Prisma migrations..."
-            MIGRATION_SUCCESS=false
-            for i in {1..5}; do
-              echo "Migration attempt $i/5..."
-              if docker exec gspa-app npx prisma migrate deploy; then
-                echo "✅ Migrations completed successfully"
-                MIGRATION_SUCCESS=true
-                break
-              else
-                echo "❌ Migration attempt $i failed"
-                echo "Debug info:"
-                docker exec gspa-app npx prisma db status 2>/dev/null || echo "Cannot check database status"
-                if [ $i -lt 5 ]; then
-                  echo "Retrying in 10 seconds..."
-                  sleep 10
-                fi
-              fi
-            done
-
-            if [ "$MIGRATION_SUCCESS" != "true" ]; then
-              echo "🚨 CRITICAL: All migration attempts failed!"
-              echo "Checking database connection..."
-              docker exec gspa-app node -e "
-                const { PrismaClient } = require('@prisma/client');
-                const prisma = new PrismaClient();
-                prisma.\$queryRaw\`SELECT 1\`
-                  .then(() => console.log('✅ Database connection works'))
-                  .catch(err => console.log('❌ Database connection failed:', err.message))
-                  .finally(() => prisma.\$disconnect());
-              " 2>/dev/null || echo "Cannot test database connection"
-              exit 1
-            fi
-
-            # Run seeding with multiple approaches
+            # ===== Run seeding =====
             echo "🌱 Running database seeding..."
-            SEED_SUCCESS=false
-            
-            # Try TypeScript seeding first
-            if docker exec gspa-app npx tsx prisma/seeders/seed.ts 2>/dev/null; then
-              echo "✅ Seeding completed successfully with tsx"
-              SEED_SUCCESS=true
-            elif docker exec gspa-app npx prisma db seed 2>/dev/null; then
-              echo "✅ Seeding completed successfully with prisma db seed"
-              SEED_SUCCESS=true
-            elif docker exec gspa-app npm run db:seed 2>/dev/null; then
-              echo "✅ Seeding completed successfully with npm script"
-              SEED_SUCCESS=true
+            if docker exec gspa-app npx tsx prisma/seeders/seed.ts; then
+              echo "✅ Seeding completed successfully"
             else
-              echo "⚠️ Seeding failed - trying direct node execution..."
-              # Try direct node execution if package.json has seed script
-              if docker exec gspa-app node -e "
-                require('tsx/dist/cli').main(['prisma/seeders/seed.ts']).catch(console.error);
-              " 2>/dev/null; then
-                echo "✅ Seeding completed with direct node execution"
-                SEED_SUCCESS=true
-              else
-                echo "⚠️ Seeding failed - this might be expected if already seeded or no seed script exists"
-              fi
+              echo "⚠️ Seeding failed or already completed"
             fi
 
-            # Verify seeding worked by checking for admin user
-            if [ "$SEED_SUCCESS" = "true" ]; then
-              echo "🔍 Verifying seed data..."
-              docker exec gspa-app node -e "
-                const { PrismaClient } = require('@prisma/client');
-                const prisma = new PrismaClient();
-                prisma.user.findMany()
-                  .then(users => {
-                    console.log('✅ Users in database:', users.length);
-                    if (users.length > 0) {
-                      console.log('First user email:', users[0].email);
-                    }
-                  })
-                  .catch(err => console.log('❌ Cannot verify users:', err.message))
-                  .finally(() => prisma.\$disconnect());
-              " 2>/dev/null || echo "Cannot verify seed data"
-            fi
-
-            echo "=== CONTAINER STATUS ==="
+            # Final verification
+            echo "🔍 Verifying deployment..."
             docker ps --format "table {{.Names}}\t{{.Status}}\t{{.Ports}}"
-
-            # Final health check
+            
             if curl -f http://localhost:3000/ >/dev/null 2>&1; then
               echo "✅ 🎉 DEPLOYMENT COMPLETED SUCCESSFULLY!"
-              echo "Application is running and accessible"
-              
-              # Show recent logs for verification
               echo "=== RECENT APPLICATION LOGS ==="
-              docker logs gspa-app --tail 20
+              docker logs gspa-app --tail 10
             else
-              echo "⚠️ Deployment completed but health check failed"
-              echo "Debug info:"
-              docker logs gspa-app --tail 50
+              echo "❌ Deployment failed - application not responding"
+              echo "=== CONTAINER LOGS ==="
+              docker logs gspa-app
               exit 1
             fi
-
-            # Final cleanup
-            echo "🧹 Performing final cleanup..."
-            docker image prune -f
 
             echo "🚀 DEPLOYMENT PROCESS FINISHED!"
