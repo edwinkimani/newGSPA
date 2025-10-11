@@ -1,32 +1,25 @@
 # Robots.txt for Global Security Practitioners Alliance (GSPA)
 # https://gspa.org
 
+
 User-agent: *
-Allow: /
-
-# Disallow admin and dashboard areas
-Disallow: /admin/
-Disallow: /dashboard/
-Disallow: /api/
-
-# Disallow authentication pages
-Disallow: /auth/
-
-# Allow public pages
 Allow: /
 Allow: /about
 Allow: /why-join
 Allow: /contact
 Allow: /modules
-Allow: /register
-Allow: /faq
-Allow: /blog
-Allow: /certification-directory
-Allow: /privacy-policy
-Allow: /terms-of-service
 
-# Sitemap location
+# Disallow all other pages
+Disallow: /admin/
+Disallow: /dashboard/
+Disallow: /api/
+Disallow: /auth/
+Disallow: /register/
+Disallow: /blog/
+Disallow: /faq/
+Disallow: /certification-directory/
+Disallow: /privacy-policy/
+Disallow: /terms-of-service/
+
 Sitemap: https://gspa.org/sitemap.xml
-
-# Crawl delay (optional, helps prevent server overload)
 Crawl-delay: 1
