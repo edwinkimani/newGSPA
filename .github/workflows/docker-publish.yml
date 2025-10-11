@@ -213,7 +213,7 @@ jobs:
               # Alternative: Run migrations with a separate container using host network
               docker run --rm \
                 --network="host" \
-                -e DATABASE_URL="mysql://$MYSQL_USER:$MYSQL_PASSWORD@localhost:3306/$MYSQL_DATABASE?connection_limit=5&socket_timeout=10" \
+                -e DATABASE_URL="mysql://${MYSQL_USER}:${MYSQL_PASSWORD}@localhost:3306/${MYSQL_DATABASE}?connection_limit=5&socket_timeout=10"
                 $IMAGE_NAME:main \
                 npx prisma migrate deploy
               
