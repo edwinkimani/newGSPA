@@ -145,7 +145,6 @@ jobs:
             set -e
             
             # Export environment variables
-            export MYSQL_ROOT_PASSWORD='${{ secrets.MYSQL_ROOT_PASSWORD }}'
             export MYSQL_DATABASE='${{ secrets.MYSQL_DATABASE }}'
             export MYSQL_USER='gspa_db_deployer'
             export MYSQL_PASSWORD='!Deployer1@#$%^&*()'
@@ -155,9 +154,9 @@ jobs:
 
             cd /home/${{ secrets.SSH_USER }}/app
 
-            # Configure MySQL user for remote access
+            # Configure MySQL user for remote access AS ROOT
             echo "🔧 Configuring MySQL user for remote access..."
-            mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "
+            sudo mysql -e "
               -- Create database if not exists
               CREATE DATABASE IF NOT EXISTS $MYSQL_DATABASE;
               
@@ -169,7 +168,7 @@ jobs:
               
               -- Apply changes
               FLUSH PRIVILEGES;
-            " 2>/dev/null && echo "✅ MySQL user configured for remote access" || echo "⚠️ MySQL user configuration skipped (may already exist)"
+            " && echo "✅ MySQL user configured for remote access"
 
             # Get host IP for database connection
             HOST_IP=$(hostname -I | awk '{print $1}')
@@ -200,8 +199,8 @@ jobs:
             echo "🔄 TEMPORARILY CHANGING MYSQL USER PASSWORD..."
             TEMP_PASSWORD="Deployer123"
             
-            # Change to simple temporary password
-            mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "
+            # Change to simple temporary password AS ROOT
+            sudo mysql -e "
               ALTER USER '$MYSQL_USER'@'%' IDENTIFIED BY '$TEMP_PASSWORD';
               FLUSH PRIVILEGES;
             " && echo "✅ MySQL user password changed to temporary simple password"
@@ -249,7 +248,7 @@ jobs:
 
             # ===== RESTORE ORIGINAL COMPLEX PASSWORD =====
             echo "🔄 RESTORING ORIGINAL COMPLEX PASSWORD..."
-            mysql -u root -p"$MYSQL_ROOT_PASSWORD" -e "
+            sudo mysql -e "
               ALTER USER '$MYSQL_USER'@'%' IDENTIFIED BY '$MYSQL_PASSWORD';
               FLUSH PRIVILEGES;
             " && echo "✅ Original complex password restored"
